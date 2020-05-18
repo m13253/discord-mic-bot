@@ -40,6 +40,7 @@ class View:
         self.hostapi = tkinter.StringVar(self.root, '')
         self.device = tkinter.StringVar(self.root, '')
         self.bitrate = tkinter.StringVar(self.root, 128)
+        self.fec_enabled = tkinter.BooleanVar(self.root, False)
         self.muted = tkinter.BooleanVar(self.root, False)
 
         self.root.title('Discord Mic Bot')
@@ -55,16 +56,17 @@ class View:
         self.hostapi_combobox.grid(column=1, row=0, pady=(4, 4), sticky=tkinter.NSEW)
         self.hostapi_combobox.bind('<<ComboboxSelected>>', self.on_device_changed)
         self.device_combobox = tkinter.ttk.Combobox(top_row, textvariable=self.device, width=16, state='readonly')
-        self.device_combobox.grid(column=2, row=0, padx=(0, 8), pady=(4, 4), sticky=tkinter.NSEW)
+        self.device_combobox.grid(column=2, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
         self.device_combobox.bind('<<ComboboxSelected>>', self.on_device_changed)
-        tkinter.ttk.Label(top_row, text='Bitrate:').grid(column=3, row=0, padx=(8, 0), pady=(4, 4), sticky=tkinter.NSEW)
+        tkinter.ttk.Label(top_row, text='Bitrate:').grid(column=3, row=0, padx=(4, 0), pady=(4, 4), sticky=tkinter.NSEW)
         bitrate_combobox = tkinter.ttk.Combobox(top_row, textvariable=self.bitrate, values=(16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512), width=6)
         bitrate_combobox.grid(column=4, row=0, pady=(4, 4), sticky=tkinter.NSEW)
         bitrate_combobox.bind('<<ComboboxSelected>>', self.on_bitrate_changed)
         bitrate_combobox.bind('<FocusOut>', self.on_bitrate_changed)
         bitrate_combobox.bind('<Return>', self.on_bitrate_changed)
-        tkinter.ttk.Label(top_row, text='Kbps').grid(column=5, row=0, padx=(0, 8), pady=(4, 4), sticky=tkinter.NSEW)
-        tkinter.ttk.Checkbutton(top_row, text='Mute', variable=self.muted, command=self.on_mute_changed).grid(column=6, row=0, padx=(8, 8), pady=(4, 4), sticky=tkinter.NSEW)
+        tkinter.ttk.Label(top_row, text='Kbps').grid(column=5, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
+        tkinter.ttk.Checkbutton(top_row, text='Voice FEC', variable=self.fec_enabled, command=self.on_fec_changed).grid(column=6, row=0, padx=(4, 4), pady=(4, 4), sticky=tkinter.NSEW)
+        tkinter.ttk.Checkbutton(top_row, text='Mute', variable=self.muted, command=self.on_mute_changed).grid(column=7, row=0, padx=(4, 16), pady=(4, 4), sticky=tkinter.NSEW)
 
         tkinter.ttk.Label(self.frame, text='Guilds:').grid(column=0, row=2, padx=(16, 8), pady=(4, 0), sticky=tkinter.NSEW)
         tkinter.ttk.Label(self.frame, text='Channels:').grid(column=1, row=2, padx=(8, 0), pady=(4, 0), sticky=tkinter.NSEW)
@@ -120,27 +122,37 @@ class View:
         m.attach_view(self)
 
     def login_status_updated(self) -> None:
+        if not self.running:
+            return
         self.login_status.set(self.m.get_login_status())
 
     def guilds_updated(self) -> None:
+        if not self.running:
+            return
         self.guilds = self.m.list_guilds()
         self.guilds_list.delete(0, tkinter.END)
         for i in self.guilds:
             self.guilds_list.insert(tkinter.END, typing.cast(str, i.name))
 
     def channels_updated(self) -> None:
+        if not self.running:
+            return
         self.channels = self.m.list_channels()
         self.channels_list.delete(0, tkinter.END)
         for i in self.channels:
             self.channels_list.insert(tkinter.END, typing.cast(str, i.name))
 
     def joined_updated(self) -> None:
+        if not self.running:
+            return
         self.joined = self.m.list_joined()
         self.joined_list.delete(0, tkinter.END)
         for i in self.joined:
             self.joined_list.insert(tkinter.END, typing.cast(str, i.name))
 
     def device_updated(self) -> None:
+        if not self.running:
+            return
         hostapis = self.m.list_sound_hostapis()
         self.hostapi_combobox['values'] = tuple(hostapis)
         current_hostapi: str = self.hostapi.get()
@@ -217,6 +229,10 @@ class View:
             bitrate = 128
         self.m.set_bitrate(bitrate)
         self.bitrate.set(bitrate)
+
+    def on_fec_changed(self) -> None:
+        fec_enabled: bool = self.fec_enabled.get()
+        self.m.set_fec_enabled(fec_enabled)
 
     def on_mute_changed(self) -> None:
         muted: bool = self.muted.get()

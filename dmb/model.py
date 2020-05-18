@@ -21,8 +21,8 @@ import ctypes
 import typing
 import discord  # type: ignore
 import discord.gateway  # type: ignore
-import numpy  # type: ignore
 import sounddevice  # type: ignore
+import traceback
 if typing.TYPE_CHECKING:
     from . import view
 
@@ -48,10 +48,8 @@ class Model:
         self.discord_bot_token = discord_bot_token
         self.discord_client: discord.Client = discord.Client(max_messages=None, assume_unsync_clock=True)
         self.login_status = 'Starting up…'
-        self.guilds: typing.List[discord.Guild] = []
         self.current_viewing_guild: typing.Optional[discord.Guild] = None
         self.channels: typing.List[discord.VoiceChannel] = []
-        self.joined: typing.List[discord.VoiceChannel] = []
 
         self.input_stream: typing.Optional[sounddevice.RawInputStream] = None
         self.audio_queue = asyncio.Queue(1)
@@ -61,10 +59,94 @@ class Model:
         # getattr is used to bypass the linter
         self.opus_encoder_private = getattr(discord.opus, '_lib')
         self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), discord.opus.CTL_SET_BITRATE, 128000)
-        # FEC only works for voice, not music, and from my experience it hurts sound quality severely.
-        # If you have a high packet loss rate, it is even better to cut the bitrate in half (so you don't burden the server), and duplicate the "socket.sendto" call.
+        # FEC only works for voice, not music, and from my experience it hurts music quality severely.
         self.opus_encoder.set_fec(False)
         self.opus_encoder.set_expected_packet_loss_percent(0)
+
+        self._set_up_events()
+
+    def _set_up_events(self) -> None:
+        async def on_connect() -> None:
+            self.login_status = 'Retreving user info…'
+            if self.v is not None:
+                self.v.login_status_updated()
+
+        self.discord_client.event(on_connect)
+
+        async def on_disconnect() -> None:
+            self.login_status = 'Reconnecting…'
+            if self.v is not None:
+                self.v.login_status_updated()
+
+        self.discord_client.event(on_disconnect)
+
+        async def on_ready() -> None:
+            user: typing.Optional[discord.ClientUser] = typing.cast(typing.Any, self.discord_client.user)
+            username = typing.cast(str, user.name) if user is not None else ''
+            self.login_status = 'Logged in as: {}'.format(username)
+            if self.v is not None:
+                self.v.login_status_updated()
+                self.v.guilds_updated()
+
+        self.discord_client.event(on_ready)
+
+        async def on_guild_channel_create(channel: discord.abc.GuildChannel) -> None:
+            if not isinstance(channel, discord.VoiceChannel):
+                return
+            if channel.guild == self.current_viewing_guild:
+                self.view_guild(self.current_viewing_guild)
+
+        self.discord_client.event(on_guild_channel_create)
+
+        async def on_guild_channel_delete(channel: discord.abc.GuildChannel) -> None:
+            if not isinstance(channel, discord.VoiceChannel):
+                return
+            if channel in self.channels:
+                self.channels.remove(channel)
+                if self.v is not None:
+                    self.v.channels_updated()
+            if self.v is not None:
+                self.v.joined_updated()
+
+        self.discord_client.event(on_guild_channel_delete)
+
+        async def on_guild_channel_update(before: discord.abc.GuildChannel, after: discord.abc.GuildChannel) -> None:
+            if not isinstance(after, discord.VoiceChannel):
+                return
+            if before in self.channels:
+                for i, c in enumerate(self.channels):
+                    if c == before:
+                        self.channels[i] = after
+                if self.v is not None:
+                    self.v.channels_updated()
+            if self.v is not None:
+                self.v.joined_updated()
+
+        self.discord_client.event(on_guild_channel_update)
+
+        async def on_guild_join(guild: discord.Guild) -> None:
+            if self.v is not None:
+                self.v.guilds_updated()
+
+        self.discord_client.event(on_guild_join)
+
+        async def on_guild_remove(guild: discord.Guild) -> None:
+            if self.v is not None:
+                self.v.guilds_updated()
+
+        self.discord_client.event(on_guild_remove)
+
+        async def on_guild_update(before: discord.Guild, after: discord.Guild) -> None:
+            if self.v is not None:
+                self.v.guilds_updated()
+
+        self.discord_client.event(on_guild_update)
+
+        async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+            if self.v is not None:
+                self.v.joined_updated()
+
+        self.discord_client.event(on_voice_state_update)
 
     def __del__(self) -> None:
         if self.input_stream is not None:
@@ -82,13 +164,13 @@ class Model:
         return self.login_status
 
     def list_guilds(self) -> typing.List[discord.Guild]:
-        return self.guilds
+        return self.discord_client.guilds
 
     def list_channels(self) -> typing.List[discord.VoiceChannel]:
         return self.channels
 
     def list_joined(self) -> typing.List[discord.VoiceChannel]:
-        return self.joined
+        return [i.channel for i in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if i.is_connected() and isinstance(i.channel, discord.VoiceChannel)]
 
     def list_sound_hostapis(self) -> typing.List[str]:
         hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any]], sounddevice.query_hostapis())
@@ -121,15 +203,11 @@ class Model:
             self.v.channels_updated()
 
     async def join_voice(self, channel: discord.VoiceChannel) -> None:
-        if channel in self.joined:
-            return
-        self.joined.append(channel)
-
         try:
             await channel.connect()
-        except Exception as e:
-            print(e)
-            self.joined.remove(channel)
+        except Exception:
+            traceback.print_last()
+            return
 
         CTL_RESET_STATE = 4028
         self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), CTL_RESET_STATE)
@@ -138,11 +216,12 @@ class Model:
             self.v.joined_updated()
 
     async def leave_voice(self, channel: discord.VoiceChannel) -> None:
-        self.joined.remove(channel)
-
         futures = {voice_client.disconnect() for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if voice_client.channel == channel}
         if futures:
-            await asyncio.wait(futures)
+            try:
+                await asyncio.wait(futures)
+            except Exception:
+                traceback.print_last()
 
         if self.v is not None:
             self.v.joined_updated()
@@ -168,20 +247,29 @@ class Model:
         try:
             self.input_stream.start()
         except Exception:
+            traceback.print_last()
             self.input_stream.close()
             self.input_stream = None
-            raise
 
     def set_bitrate(self, kbps: int) -> None:
         kbps = min(512, max(12, kbps))
         self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), discord.opus.CTL_SET_BITRATE, kbps * 1000)
+
+    def set_fec_enabled(self, enabled: bool) -> None:
+        if enabled:
+            self.opus_encoder.set_fec(True)
+            self.opus_encoder.set_expected_packet_loss_percent(0.15)
+        else:
+            self.opus_encoder.set_fec(False)
+            self.opus_encoder.set_expected_packet_loss_percent(0)
 
     def set_muted(self, muted: bool) -> None:
         self.muted = muted
 
     def _recording_callback(self, indata: typing.Any, frames: int, time: typing.Any, status: sounddevice.CallbackFlags) -> None:
         indata = bytes(indata)
-        self.loop.call_soon_threadsafe(self._recording_callback_main_thread, indata)
+        if not self.loop.is_closed():
+            self.loop.call_soon_threadsafe(self._recording_callback_main_thread, indata)
 
     def _recording_callback_main_thread(self, indata: bytes) -> None:
         try:
@@ -221,8 +309,8 @@ class Model:
                 if voice_client.is_connected():
                     try:
                         voice_client.send_audio_packet(packet, encode=False)
-                    except Exception as e:
-                        print(e)
+                    except Exception:
+                        traceback.print_last()
 
     async def run(self) -> None:
         self.login_status = 'Logging in…'
@@ -234,18 +322,8 @@ class Model:
         if self.v is not None:
             self.v.login_status_updated()
         asyncio.ensure_future(self.discord_client.connect())
+
         await self.discord_client.wait_until_ready()
-
-        user: typing.Optional[discord.ClientUser] = typing.cast(typing.Any, self.discord_client.user)
-        username = typing.cast(str, user.name) if user is not None else ''
-        self.login_status = 'Logged in as: {}'.format(username)
-        if self.v is not None:
-            self.v.login_status_updated()
-
-        self.guilds = await typing.cast(typing.Awaitable[typing.List[discord.Guild]], self.discord_client.fetch_guilds(limit=None).flatten())
-        if self.v is not None:
-            self.v.guilds_updated()
-
         await self._encode_voice_loop()
 
     async def stop(self) -> None:
