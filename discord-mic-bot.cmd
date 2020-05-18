@@ -1,3 +1,3 @@
 @echo off
 
-python3 -m dmb %*
+python -m dmb %*
