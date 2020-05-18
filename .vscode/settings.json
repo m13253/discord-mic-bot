@@ -1,0 +1,4 @@
+{
+    "pyright.typeCheckingMode": "strict",
+    "pyright.useLibraryCodeForTypes": true,
+}
