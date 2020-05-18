@@ -29,7 +29,8 @@ You need to obtain a bot token to log into Discord's server.
 
 2. Inside the settings panel of your new application, click on "Bot".
 
-3. Create a new bot. When asked about permissions, simply leave blank is enough.
+3. Create a new bot. When asked about permissions, simply leaving blank is
+   enough.
 
 4. Click on "Copy Token".
 
