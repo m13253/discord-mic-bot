@@ -33,6 +33,13 @@ class View:
         self.root = tkinter.Tk()
         self.root.bind('<Destroy>', self.on_destroy)
 
+        ttk_style = tkinter.ttk.Style()
+        ttk_theme_names: typing.Tuple[str, ...] = ttk_style.theme_names()
+        for theme in ('vista', 'aqua', 'clam'):
+            if theme in ttk_theme_names:
+                ttk_style.theme_use(theme)
+                break
+
         self.login_status = tkinter.StringVar(self.root, 'Starting up…')
         self.guilds: typing.List[discord.Guild] = []
         self.channels: typing.List[discord.VoiceChannel] = []
@@ -178,23 +185,23 @@ class View:
         self.running = False
 
     def on_guild_changed(self, event: tkinter.Event) -> None:
-        current_selections: typing.Tuple[int] = self.guilds_list.curselection()
-        current_guild: typing.Optional[discord.Guild] = None
-        if len(current_selections) != 0 and current_selections[0] < len(self.guilds):
-            current_guild = self.guilds[current_selections[0]]
+        current_selections: typing.Tuple[int, ...] = self.guilds_list.curselection()
+        if len(current_selections) == 0 or current_selections[0] >= len(self.guilds):
+            return
+        current_guild = self.guilds[current_selections[0]]
         self.channels_list.delete(0, tkinter.END)
         asyncio.ensure_future(self.m.view_guild(current_guild))
 
     def on_add_button_pressed(self) -> None:
-        current_selections: typing.Tuple[int] = self.channels_list.curselection()
+        current_selections: typing.Tuple[int, ...] = self.channels_list.curselection()
         if len(current_selections) == 0 or current_selections[0] >= len(self.channels):
             return
         current_channel = self.channels[current_selections[0]]
         asyncio.ensure_future(self.m.join_voice(current_channel))
 
     def on_remove_button_pressed(self) -> None:
-        current_selections: typing.Tuple[int] = self.joined_list.curselection()
-        if len(current_selections) == 0 and current_selections[0] >= len(self.joined):
+        current_selections: typing.Tuple[int, ...] = self.joined_list.curselection()
+        if len(current_selections) == 0 or current_selections[0] >= len(self.joined):
             return
         current_channel = self.joined[current_selections[0]]
         asyncio.ensure_future(self.m.leave_voice(current_channel))

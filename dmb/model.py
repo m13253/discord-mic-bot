@@ -52,8 +52,11 @@ class Model:
         self.channels: typing.List[discord.VoiceChannel] = []
 
         self.input_stream: typing.Optional[sounddevice.RawInputStream] = None
-        self.audio_queue = asyncio.Queue(1)
+        self.audio_queue = asyncio.Queue(3)  #  2048 / 960, should work even with bad-designed audio systems (e.g. Windows MME)
         self.muted = False
+        self.warning_count_size = 0
+        self.warning_count_overflow = 0
+
         self.opus_encoder = discord.opus.Encoder()
         # Use the private function just to satisfy my paranoid of 1 Kbps == 1000 bps.
         # getattr is used to bypass the linter
@@ -148,12 +151,6 @@ class Model:
 
         self.discord_client.event(on_voice_state_update)
 
-    def __del__(self) -> None:
-        if self.input_stream is not None:
-            self.input_stream.stop()
-            self.input_stream.close()
-        asyncio.run(self.discord_client.close())
-
     def attach_view(self, v: view.View) -> None:
         self.v = v
         self.v.login_status_updated()
@@ -173,11 +170,11 @@ class Model:
         return [i.channel for i in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if i.is_connected() and isinstance(i.channel, discord.VoiceChannel)]
 
     def list_sound_hostapis(self) -> typing.List[str]:
-        hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any]], sounddevice.query_hostapis())
+        hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any], ...], sounddevice.query_hostapis())
         return [i['name'] for i in hostapis]
 
     def list_sound_input_devices(self, hostapi: str) -> typing.List[SoundDevice]:
-        hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any]], sounddevice.query_hostapis())
+        hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any], ...], sounddevice.query_hostapis())
         devices = typing.cast(sounddevice.DeviceList, sounddevice.query_devices())
 
         default_input_id, _ = typing.cast(typing.Tuple[typing.Optional[int], typing.Optional[int]], sounddevice.default.device)
@@ -232,7 +229,7 @@ class Model:
             self.input_stream.close()
             self.input_stream = None
 
-        hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any]], sounddevice.query_hostapis())
+        hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any], ...], sounddevice.query_hostapis())
         devices = typing.cast(sounddevice.DeviceList, sounddevice.query_devices())
 
         device_id: int
@@ -267,15 +264,21 @@ class Model:
         self.muted = muted
 
     def _recording_callback(self, indata: typing.Any, frames: int, time: typing.Any, status: sounddevice.CallbackFlags) -> None:
-        indata = bytes(indata)
-        if not self.loop.is_closed():
+        if frames != 48000 * 20 // 1000:
+            self.warning_count_size += 1
+            print('{}: Audio frame size mismatch: {} != {}'.format(self.warning_count_size, frames, 48000 * 20 // 1000))
+        indata = bytes(indata)[:frames * 8]
+        if self.running:
             self.loop.call_soon_threadsafe(self._recording_callback_main_thread, indata)
 
     def _recording_callback_main_thread(self, indata: bytes) -> None:
         try:
             self.audio_queue.put_nowait(indata)
         except asyncio.queues.QueueFull:
-            pass
+            if not self.running:
+                return
+            self.warning_count_overflow += 1
+            print('{}: Audio overflow: encoder not fast enough.'.format(self.warning_count_overflow))
 
     async def _encode_voice_loop(self) -> None:
         consecutive_silence = 0
@@ -292,12 +295,14 @@ class Model:
             else:
                 consecutive_silence = 0
 
-            speaking = discord.SpeakingState.voice if consecutive_silence <= 1 else discord.SpeakingState.none
+            speaking = discord.SpeakingState.soundshare if consecutive_silence <= 1 else discord.SpeakingState.none
             for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
                 if voice_client.is_connected() and getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none) != speaking:
                     asyncio.ensure_future(typing.cast(discord.gateway.DiscordVoiceWebSocket, voice_client.ws).speak(speaking))
                     setattr(voice_client, '_dmb_speaking', speaking)
-            if consecutive_silence > 2:
+
+            # When there's a break in the sent data, the packet transmission shouldn't simply stop. Instead, send five frames of silence (0xF8, 0xFF, 0xFE) before stopping to avoid unintended Opus interpolation with subsequent transmissions.
+            if consecutive_silence > 5:
                 continue
 
             max_data_bytes = len(buffer)
@@ -313,6 +318,8 @@ class Model:
                         traceback.print_last()
 
     async def run(self) -> None:
+        asyncio.ensure_future(self._encode_voice_loop())
+
         self.login_status = 'Logging in…'
         if self.v is not None:
             self.v.login_status_updated()
@@ -324,9 +331,12 @@ class Model:
         asyncio.ensure_future(self.discord_client.connect())
 
         await self.discord_client.wait_until_ready()
-        await self._encode_voice_loop()
 
     async def stop(self) -> None:
         self.running = False
+        if self.input_stream is not None:
+            self.input_stream.stop()
+            self.input_stream.close()
+            self.input_stream = None
         await self.audio_queue.put(None)
-        await self.discord_client.logout()
+        await self.discord_client.close()

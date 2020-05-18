@@ -33,6 +33,6 @@ async def main() -> None:
     m = model.Model(discord_bot_token)
     v = view.View(m)
 
-    t1 = v.run_loop()
-    t2 = m.run()
-    await asyncio.wait((t1, t2))
+    f1 = v.run_loop()
+    f2 = m.run()
+    await asyncio.wait((f1, f2))
