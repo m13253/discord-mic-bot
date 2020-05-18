@@ -203,7 +203,7 @@ class Model:
         try:
             await channel.connect()
         except Exception:
-            traceback.print_last()
+            traceback.print_exc()
             return
 
         CTL_RESET_STATE = 4028
@@ -218,7 +218,7 @@ class Model:
             try:
                 await asyncio.wait(futures)
             except Exception:
-                traceback.print_last()
+                traceback.print_exc()
 
         if self.v is not None:
             self.v.joined_updated()
@@ -244,7 +244,7 @@ class Model:
         try:
             self.input_stream.start()
         except Exception:
-            traceback.print_last()
+            traceback.print_exc()
             self.input_stream.close()
             self.input_stream = None
 
@@ -315,7 +315,7 @@ class Model:
                     try:
                         voice_client.send_audio_packet(packet, encode=False)
                     except Exception:
-                        traceback.print_last()
+                        traceback.print_exc()
 
     async def run(self) -> None:
         asyncio.ensure_future(self._encode_voice_loop())
