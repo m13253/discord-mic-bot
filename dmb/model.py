@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import asyncio.queues
 import ctypes
+import logging
 import typing
 import discord  # type: ignore
 import discord.gateway  # type: ignore
@@ -44,6 +45,11 @@ class Model:
         self.running = True
 
         self.loop = asyncio.get_running_loop()
+        self.logger = logging.getLogger('model')
+        self.logger.setLevel(logging.INFO)
+        logging_handler = logging.StreamHandler()
+        logging_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S'))
+        self.logger.addHandler(logging_handler)
 
         self.discord_bot_token = discord_bot_token
         self.discord_client: discord.Client = discord.Client(max_messages=None, assume_unsync_clock=True)
@@ -53,8 +59,7 @@ class Model:
         self.input_stream: typing.Optional[sounddevice.RawInputStream] = None
         self.audio_queue = asyncio.Queue(3)  #  2048 / 960, should work even with bad-designed audio systems (e.g. Windows MME)
         self.muted = False
-        self.warning_count_size = 0
-        self.warning_count_overflow = 0
+        self.overflow_warning_count = 0
 
         self.opus_encoder = discord.opus.Encoder()
         # Use the private function just to satisfy my paranoid of 1 Kbps == 1000 bps.
@@ -70,6 +75,7 @@ class Model:
     def _set_up_events(self) -> None:
         async def on_connect() -> None:
             self.login_status = 'Retreving user info…'
+            self.logger.info(self.login_status)
             if self.v is not None:
                 self.v.login_status_updated()
 
@@ -77,6 +83,7 @@ class Model:
 
         async def on_disconnect() -> None:
             self.login_status = 'Reconnecting…'
+            self.logger.info(self.login_status)
             if self.v is not None:
                 self.v.login_status_updated()
 
@@ -86,6 +93,7 @@ class Model:
             user: typing.Optional[discord.ClientUser] = typing.cast(typing.Any, self.discord_client.user)
             username = typing.cast(str, user.name) if user is not None else ''
             self.login_status = 'Logged in as: {}'.format(username)
+            self.logger.info(self.login_status)
             if self.v is not None:
                 self.v.login_status_updated()
                 self.v.guilds_updated()
@@ -96,6 +104,7 @@ class Model:
             user: typing.Optional[discord.ClientUser] = typing.cast(typing.Any, self.discord_client.user)
             username = typing.cast(str, user.name) if user is not None else ''
             self.login_status = 'Logged in as: {}'.format(username)
+            self.logger.info(self.login_status)
             if self.v is not None:
                 self.v.login_status_updated()
                 self.v.guilds_updated()
@@ -264,8 +273,7 @@ class Model:
 
     def _recording_callback(self, indata: typing.Any, frames: int, time: typing.Any, status: sounddevice.CallbackFlags) -> None:
         if frames != 48000 * 20 // 1000:
-            self.warning_count_size += 1
-            print('Warning: Audio frame size mismatch: {} != {}. ({})'.format(frames, 48000 * 20 // 1000, self.warning_count_size))
+            self.logger.warn('Audio frame size mismatch: {} != {}.'.format(frames, 48000 * 20 // 1000))
         indata = bytes(indata)[:frames * 8]
         if self.running:
             self.loop.call_soon_threadsafe(self._recording_callback_main_thread, indata)
@@ -276,8 +284,8 @@ class Model:
         except asyncio.queues.QueueFull:
             if not self.running:
                 return
-            self.warning_count_overflow += 1
-            print('Warning: Audio overflow: encoder not fast enough. ({})'.format(self.warning_count_overflow))
+            self.overflow_warning_count += 1
+            self.logger.warn('Audio overflow: encoder not fast enough. (count={})'.format(self.overflow_warning_count))
 
     async def _encode_voice_loop(self) -> None:
         consecutive_silence = 0
@@ -320,11 +328,13 @@ class Model:
         asyncio.ensure_future(self._encode_voice_loop())
 
         self.login_status = 'Logging in…'
+        self.logger.info(self.login_status)
         if self.v is not None:
             self.v.login_status_updated()
         await self.discord_client.login(self.discord_bot_token, bot=True)
 
         self.login_status = 'Connecting to Discord server…'
+        self.logger.info(self.login_status)
         if self.v is not None:
             self.v.login_status_updated()
         asyncio.ensure_future(self.discord_client.connect())
