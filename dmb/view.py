@@ -57,7 +57,8 @@ class View:
         tkinter.ttk.Label(self.frame, textvariable=self.login_status).grid(column=0, row=0, columnspan=3, padx=16, pady=(16, 4), sticky=tkinter.NSEW)
 
         top_row = tkinter.ttk.Frame(self.frame)
-        top_row.grid(column=0, row=1, columnspan=4, sticky=tkinter.W)
+        top_row.grid(column=0, row=1, columnspan=4, sticky=tkinter.NSEW)
+
         tkinter.ttk.Label(top_row, text='Device:').grid(column=0, row=0, padx=(16, 0), pady=(4, 4), sticky=tkinter.NSEW)
         self.hostapi_combobox = tkinter.ttk.Combobox(top_row, textvariable=self.hostapi, width=12, state='readonly')
         self.hostapi_combobox.grid(column=1, row=0, pady=(4, 4), sticky=tkinter.NSEW)
@@ -72,8 +73,13 @@ class View:
         bitrate_combobox.bind('<FocusOut>', self.on_bitrate_changed)
         bitrate_combobox.bind('<Return>', self.on_bitrate_changed)
         tkinter.ttk.Label(top_row, text='Kbps').grid(column=5, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
-        tkinter.ttk.Checkbutton(top_row, text='Voice FEC', variable=self.fec_enabled, command=self.on_fec_changed).grid(column=6, row=0, padx=(4, 4), pady=(4, 4), sticky=tkinter.NSEW)
+
+        # FEC only works for voice, not music, and from my experience it hurts music quality severely.
+        tkinter.ttk.Checkbutton(top_row, text='FEC (voice only)', variable=self.fec_enabled, command=self.on_fec_changed).grid(column=6, row=0, padx=(4, 4), pady=(4, 4), sticky=tkinter.NSEW)
         tkinter.ttk.Checkbutton(top_row, text='Mute', variable=self.muted, command=self.on_mute_changed).grid(column=7, row=0, padx=(4, 16), pady=(4, 4), sticky=tkinter.NSEW)
+
+        top_row.grid_columnconfigure(1, weight=1)
+        top_row.grid_columnconfigure(2, weight=2)
 
         tkinter.ttk.Label(self.frame, text='Guilds:').grid(column=0, row=2, padx=(16, 8), pady=(4, 0), sticky=tkinter.NSEW)
         tkinter.ttk.Label(self.frame, text='Channels:').grid(column=1, row=2, padx=(8, 0), pady=(4, 0), sticky=tkinter.NSEW)
@@ -189,8 +195,7 @@ class View:
         if len(current_selections) == 0 or current_selections[0] >= len(self.guilds):
             return
         current_guild = self.guilds[current_selections[0]]
-        self.channels_list.delete(0, tkinter.END)
-        asyncio.ensure_future(self.m.view_guild(current_guild))
+        self.m.view_guild(current_guild)
 
     def on_add_button_pressed(self) -> None:
         current_selections: typing.Tuple[int, ...] = self.channels_list.curselection()

@@ -49,7 +49,6 @@ class Model:
         self.discord_client: discord.Client = discord.Client(max_messages=None, assume_unsync_clock=True)
         self.login_status = 'Starting up…'
         self.current_viewing_guild: typing.Optional[discord.Guild] = None
-        self.channels: typing.List[discord.VoiceChannel] = []
 
         self.input_stream: typing.Optional[sounddevice.RawInputStream] = None
         self.audio_queue = asyncio.Queue(3)  #  2048 / 960, should work even with bad-designed audio systems (e.g. Windows MME)
@@ -93,22 +92,31 @@ class Model:
 
         self.discord_client.event(on_ready)
 
+        async def on_resumed() -> None:
+            user: typing.Optional[discord.ClientUser] = typing.cast(typing.Any, self.discord_client.user)
+            username = typing.cast(str, user.name) if user is not None else ''
+            self.login_status = 'Logged in as: {}'.format(username)
+            if self.v is not None:
+                self.v.login_status_updated()
+                self.v.guilds_updated()
+
+        self.discord_client.event(on_resumed)
+
         async def on_guild_channel_create(channel: discord.abc.GuildChannel) -> None:
             if not isinstance(channel, discord.VoiceChannel):
                 return
-            if channel.guild == self.current_viewing_guild:
-                self.view_guild(self.current_viewing_guild)
+            if self.v is not None:
+                if self.current_viewing_guild == channel.guild:
+                    self.v.channels_updated()
 
         self.discord_client.event(on_guild_channel_create)
 
         async def on_guild_channel_delete(channel: discord.abc.GuildChannel) -> None:
             if not isinstance(channel, discord.VoiceChannel):
                 return
-            if channel in self.channels:
-                self.channels.remove(channel)
-                if self.v is not None:
-                    self.v.channels_updated()
             if self.v is not None:
+                if self.current_viewing_guild == channel.guild:
+                    self.v.channels_updated()
                 self.v.joined_updated()
 
         self.discord_client.event(on_guild_channel_delete)
@@ -116,13 +124,9 @@ class Model:
         async def on_guild_channel_update(before: discord.abc.GuildChannel, after: discord.abc.GuildChannel) -> None:
             if not isinstance(after, discord.VoiceChannel):
                 return
-            if before in self.channels:
-                for i, c in enumerate(self.channels):
-                    if c == before:
-                        self.channels[i] = after
-                if self.v is not None:
-                    self.v.channels_updated()
             if self.v is not None:
+                if self.current_viewing_guild == after.guild:
+                    self.v.channels_updated()
                 self.v.joined_updated()
 
         self.discord_client.event(on_guild_channel_update)
@@ -164,7 +168,9 @@ class Model:
         return self.discord_client.guilds
 
     def list_channels(self) -> typing.List[discord.VoiceChannel]:
-        return self.channels
+        if self.current_viewing_guild is None:
+            return []
+        return self.current_viewing_guild.voice_channels
 
     def list_joined(self) -> typing.List[discord.VoiceChannel]:
         return [i.channel for i in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if i.is_connected() and isinstance(i.channel, discord.VoiceChannel)]
@@ -187,15 +193,8 @@ class Model:
 
         return [SoundDevice(typing.cast(str, dev['name']), idx == default_input_id) for idx, dev in enumerate(typing.cast(typing.Iterable[typing.Dict[str, typing.Any]], devices)) if dev['max_input_channels'] > 0 and dev['hostapi'] < len(hostapis) and hostapis[typing.cast(int, dev['hostapi'])]['name'] == hostapi]
 
-    async def view_guild(self, guild: typing.Optional[discord.Guild]) -> None:
-        self.channels = []
+    def view_guild(self, guild: typing.Optional[discord.Guild]) -> None:
         self.current_viewing_guild = guild
-        if guild is None:
-            return
-        channels = await typing.cast(typing.Awaitable[typing.List[discord.abc.GuildChannel]], guild.fetch_channels())
-        if self.current_viewing_guild != guild:
-            return
-        self.channels = [i for i in channels if isinstance(i, discord.VoiceChannel)]
         if self.v is not None:
             self.v.channels_updated()
 
@@ -266,7 +265,7 @@ class Model:
     def _recording_callback(self, indata: typing.Any, frames: int, time: typing.Any, status: sounddevice.CallbackFlags) -> None:
         if frames != 48000 * 20 // 1000:
             self.warning_count_size += 1
-            print('{}: Audio frame size mismatch: {} != {}'.format(self.warning_count_size, frames, 48000 * 20 // 1000))
+            print('Warning: Audio frame size mismatch: {} != {}. ({})'.format(frames, 48000 * 20 // 1000, self.warning_count_size))
         indata = bytes(indata)[:frames * 8]
         if self.running:
             self.loop.call_soon_threadsafe(self._recording_callback_main_thread, indata)
@@ -278,7 +277,7 @@ class Model:
             if not self.running:
                 return
             self.warning_count_overflow += 1
-            print('{}: Audio overflow: encoder not fast enough.'.format(self.warning_count_overflow))
+            print('Warning: Audio overflow: encoder not fast enough. ({})'.format(self.warning_count_overflow))
 
     async def _encode_voice_loop(self) -> None:
         consecutive_silence = 0
