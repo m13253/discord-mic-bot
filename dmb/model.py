@@ -17,8 +17,10 @@
 from __future__ import annotations
 import asyncio
 import asyncio.queues
+import concurrent.futures
 import ctypes
 import logging
+import time
 import typing
 import discord  # type: ignore
 import discord.gateway  # type: ignore
@@ -40,11 +42,11 @@ class SoundDevice:
 
 
 class Model:
-    def __init__(self, discord_bot_token: str) -> None:
+    def __init__(self, discord_bot_token: str, loop: asyncio.AbstractEventLoop) -> None:
         self.v: typing.Optional[view.View] = None
+        self.loop = loop
         self.running = True
 
-        self.loop = asyncio.get_running_loop()
         self.logger = logging.getLogger('model')
         self.logger.setLevel(logging.INFO)
         logging_handler = logging.StreamHandler()
@@ -52,14 +54,14 @@ class Model:
         self.logger.addHandler(logging_handler)
 
         self.discord_bot_token = discord_bot_token
-        self.discord_client: discord.Client = discord.Client(max_messages=None, assume_unsync_clock=True)
+        self.discord_client: discord.Client = discord.Client(loop=self.loop, max_messages=None, assume_unsync_clock=True)
         self.login_status = 'Starting up…'
         self.current_viewing_guild: typing.Optional[discord.Guild] = None
 
         self.input_stream: typing.Optional[sounddevice.RawInputStream] = None
-        self.audio_queue = asyncio.Queue(3)  #  2048 / 960, should work even with bad-designed audio systems (e.g. Windows MME)
+        self.audio_warning_count = 0
+        self.audio_queue: asyncio.Queue[typing.Optional[bytes]] = asyncio.Queue(3, loop=self.loop)  #  2048 / 960, should work even with bad-designed audio systems (e.g. Windows MME)
         self.muted = False
-        self.overflow_warning_count = 0
 
         self.opus_encoder = discord.opus.Encoder()
         # Use the private function just to satisfy my paranoid of 1 Kbps == 1000 bps.
@@ -67,8 +69,9 @@ class Model:
         self.opus_encoder_private = getattr(discord.opus, '_lib')
         self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), discord.opus.CTL_SET_BITRATE, 128000)
         # FEC only works for voice, not music, and from my experience it hurts music quality severely.
-        self.opus_encoder.set_fec(False)
-        self.opus_encoder.set_expected_packet_loss_percent(0)
+        self.opus_encoder.set_fec(True)
+        self.opus_encoder.set_expected_packet_loss_percent(0.15)
+        self.opus_encoder_executor = concurrent.futures.ThreadPoolExecutor(1)
 
         self._set_up_events()
 
@@ -77,15 +80,18 @@ class Model:
             self.login_status = 'Retreving user info…'
             self.logger.info(self.login_status)
             if self.v is not None:
-                self.v.login_status_updated()
+                self.v.loop.call_soon_threadsafe(self.v.login_status_updated)
 
         self.discord_client.event(on_connect)
 
         async def on_disconnect() -> None:
-            self.login_status = 'Reconnecting…'
+            if self.running:
+                self.login_status = 'Reconnecting…'
+            else:
+                self.login_status = 'Disconnected from Discord.'
             self.logger.info(self.login_status)
             if self.v is not None:
-                self.v.login_status_updated()
+                self.v.loop.call_soon_threadsafe(self.v.login_status_updated)
 
         self.discord_client.event(on_disconnect)
 
@@ -95,8 +101,8 @@ class Model:
             self.login_status = 'Logged in as: {}'.format(username)
             self.logger.info(self.login_status)
             if self.v is not None:
-                self.v.login_status_updated()
-                self.v.guilds_updated()
+                self.v.loop.call_soon_threadsafe(self.v.login_status_updated)
+                self.v.loop.call_soon_threadsafe(self.v.guilds_updated)
 
         self.discord_client.event(on_ready)
 
@@ -106,8 +112,8 @@ class Model:
             self.login_status = 'Logged in as: {}'.format(username)
             self.logger.info(self.login_status)
             if self.v is not None:
-                self.v.login_status_updated()
-                self.v.guilds_updated()
+                self.v.loop.call_soon_threadsafe(self.v.login_status_updated)
+                self.v.loop.call_soon_threadsafe(self.v.guilds_updated)
 
         self.discord_client.event(on_resumed)
 
@@ -116,7 +122,7 @@ class Model:
                 return
             if self.v is not None:
                 if self.current_viewing_guild == channel.guild:
-                    self.v.channels_updated()
+                    self.v.loop.call_soon_threadsafe(self.v.channels_updated)
 
         self.discord_client.event(on_guild_channel_create)
 
@@ -125,8 +131,8 @@ class Model:
                 return
             if self.v is not None:
                 if self.current_viewing_guild == channel.guild:
-                    self.v.channels_updated()
-                self.v.joined_updated()
+                    self.v.loop.call_soon_threadsafe(self.v.channels_updated)
+                self.v.loop.call_soon_threadsafe(self.v.joined_updated)
 
         self.discord_client.event(on_guild_channel_delete)
 
@@ -135,40 +141,40 @@ class Model:
                 return
             if self.v is not None:
                 if self.current_viewing_guild == after.guild:
-                    self.v.channels_updated()
-                self.v.joined_updated()
+                    self.v.loop.call_soon_threadsafe(self.v.channels_updated)
+                self.v.loop.call_soon_threadsafe(self.v.joined_updated)
 
         self.discord_client.event(on_guild_channel_update)
 
         async def on_guild_join(guild: discord.Guild) -> None:
             if self.v is not None:
-                self.v.guilds_updated()
+                self.v.loop.call_soon_threadsafe(self.v.guilds_updated)
 
         self.discord_client.event(on_guild_join)
 
         async def on_guild_remove(guild: discord.Guild) -> None:
             if self.v is not None:
-                self.v.guilds_updated()
+                self.v.loop.call_soon_threadsafe(self.v.guilds_updated)
 
         self.discord_client.event(on_guild_remove)
 
         async def on_guild_update(before: discord.Guild, after: discord.Guild) -> None:
             if self.v is not None:
-                self.v.guilds_updated()
+                self.v.loop.call_soon_threadsafe(self.v.guilds_updated)
 
         self.discord_client.event(on_guild_update)
 
         async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
             if self.v is not None:
-                self.v.joined_updated()
+                self.v.loop.call_soon_threadsafe(self.v.joined_updated)
 
         self.discord_client.event(on_voice_state_update)
 
     def attach_view(self, v: view.View) -> None:
         self.v = v
-        self.v.login_status_updated()
-        self.v.guilds_updated()
-        self.v.device_updated()
+        self.v.loop.call_soon_threadsafe(self.v.login_status_updated)
+        self.v.loop.call_soon_threadsafe(self.v.guilds_updated)
+        self.v.loop.call_soon_threadsafe(self.v.device_updated)
 
     def get_login_status(self) -> str:
         return self.login_status
@@ -182,7 +188,7 @@ class Model:
         return self.current_viewing_guild.voice_channels
 
     def list_joined(self) -> typing.List[discord.VoiceChannel]:
-        return [i.channel for i in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if i.is_connected() and isinstance(i.channel, discord.VoiceChannel)]
+        return [i.channel for i in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if isinstance(i.channel, discord.VoiceChannel)]
 
     def list_sound_hostapis(self) -> typing.List[str]:
         hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any], ...], sounddevice.query_hostapis())
@@ -205,7 +211,8 @@ class Model:
     def view_guild(self, guild: typing.Optional[discord.Guild]) -> None:
         self.current_viewing_guild = guild
         if self.v is not None:
-            self.v.channels_updated()
+            self.v.loop.call_soon_threadsafe(self.v.channels_updated)
+            self.v.loop.call_soon_threadsafe(self.v.joined_updated)
 
     async def join_voice(self, channel: discord.VoiceChannel) -> None:
         try:
@@ -214,11 +221,14 @@ class Model:
             traceback.print_exc()
             return
 
-        CTL_RESET_STATE = 4028
-        self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), CTL_RESET_STATE)
+        await self.loop.run_in_executor(self.opus_encoder_executor, self._reset_opus_encoder)
 
         if self.v is not None:
-            self.v.joined_updated()
+            self.v.loop.call_soon_threadsafe(self.v.joined_updated)
+
+    def _reset_opus_encoder(self) -> None:
+        CTL_RESET_STATE = 4028
+        self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), CTL_RESET_STATE)
 
     async def leave_voice(self, channel: discord.VoiceChannel) -> None:
         futures = {voice_client.disconnect() for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if voice_client.channel == channel}
@@ -229,7 +239,7 @@ class Model:
                 traceback.print_exc()
 
         if self.v is not None:
-            self.v.joined_updated()
+            self.v.loop.call_soon_threadsafe(self.v.joined_updated)
 
     def start_recording(self, hostapi: str, device: str) -> None:
         if self.input_stream is not None:
@@ -256,11 +266,17 @@ class Model:
             self.input_stream.close()
             self.input_stream = None
 
-    def set_bitrate(self, kbps: int) -> None:
+    async def set_bitrate(self, kbps: int) -> None:
+        await self.loop.run_in_executor(self.opus_encoder_executor, self._set_bitrate, kbps)
+
+    def _set_bitrate(self, kbps: int) -> None:
         kbps = min(512, max(12, kbps))
         self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), discord.opus.CTL_SET_BITRATE, kbps * 1000)
 
-    def set_fec_enabled(self, enabled: bool) -> None:
+    async def set_fec_enabled(self, enabled: bool) -> None:
+        await self.loop.run_in_executor(self.opus_encoder_executor, self._set_fec_enabled, enabled)
+
+    def _set_fec_enabled(self, enabled: bool) -> None:
         if enabled:
             self.opus_encoder.set_fec(True)
             self.opus_encoder.set_expected_packet_loss_percent(0.15)
@@ -272,27 +288,37 @@ class Model:
         self.muted = muted
 
     def _recording_callback(self, indata: typing.Any, frames: int, time: typing.Any, status: sounddevice.CallbackFlags) -> None:
+        if status.input_underflow:
+            self.audio_warning_count += 1
+            self.logger.warn('Audio underflow: operating system unable to supply enough audio. (count={})'.format(self.audio_warning_count))
+        if status.input_overflow:
+            self.audio_warning_count += 1
+            self.logger.warn('Audio overflow: recording thread not fast enough. (count={})'.format(self.audio_warning_count))
         if frames != 48000 * 20 // 1000:
-            self.logger.warn('Audio frame size mismatch: {} != {}.'.format(frames, 48000 * 20 // 1000))
-        indata = bytes(indata)[:frames * 8]
-        if self.running:
-            self.loop.call_soon_threadsafe(self._recording_callback_main_thread, indata)
+            self.audio_warning_count += 1
+            self.logger.warn('Audio frame size mismatch: {} != {}.'.format(frames, 48000 * 20 // 1000), self.audio_warning_count)
 
-    def _recording_callback_main_thread(self, indata: bytes) -> None:
+        if self.running:
+            indata = bytes(indata)[:frames * 8]
+            asyncio.run_coroutine_threadsafe(self._recording_callback_main_thread(indata), self.loop).result()
+
+    async def _recording_callback_main_thread(self, indata: bytes) -> None:
         try:
             self.audio_queue.put_nowait(indata)
         except asyncio.queues.QueueFull:
             if not self.running:
                 return
-            self.overflow_warning_count += 1
-            self.logger.warn('Audio overflow: encoder not fast enough. (count={})'.format(self.overflow_warning_count))
+            self.audio_warning_count += 1
+            self.logger.warn('Audio overflow: encoder not fast enough. (count={})'.format(self.audio_warning_count))
 
     async def _encode_voice_loop(self) -> None:
         consecutive_silence = 0
+
         while self.running:
-            buffer: typing.Optional[bytes] = await self.audio_queue.get()
+            buffer = await self.audio_queue.get()
             if buffer is None:
                 return
+            timestamp = time.monotonic_ns()
 
             if self.muted:
                 buffer = bytes(len(buffer))
@@ -302,21 +328,29 @@ class Model:
             else:
                 consecutive_silence = 0
 
-            speaking = discord.SpeakingState.soundshare if consecutive_silence <= 1 else discord.SpeakingState.none
-            for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
-                if voice_client.is_connected() and getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none) != speaking:
-                    asyncio.ensure_future(typing.cast(discord.gateway.DiscordVoiceWebSocket, voice_client.ws).speak(speaking))
-                    setattr(voice_client, '_dmb_speaking', speaking)
+            if consecutive_silence <= 1:
+                for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
+                    if voice_client.is_connected():
+                        voice_client_name: str = typing.cast(discord.VoiceChannel, voice_client.channel).name
+                        if getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none) != discord.SpeakingState.soundshare:
+                            self.logger.info('Start speaking on: {}'.format(voice_client_name))
+                            self._set_speaking_state(voice_client, discord.SpeakingState.soundshare, timestamp)
+                        elif timestamp - getattr(voice_client, '_dmb_last_spoke', timestamp) >= 60000000000:
+                            self.logger.info('Continue speaking on: {}'.format(typing.cast(str, typing.cast(discord.VoiceChannel, voice_client.channel).name)))
+                            self._set_speaking_state(voice_client, discord.SpeakingState.soundshare, timestamp)
+            else:
+                for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
+                    if voice_client.is_connected():
+                        voice_client_name: str = typing.cast(discord.VoiceChannel, voice_client.channel).name
+                        if getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none) != discord.SpeakingState.none:
+                            self.logger.info('Stop speaking on: {}'.format(voice_client_name))
+                            self._set_speaking_state(voice_client, discord.SpeakingState.none, timestamp)
 
             # When there's a break in the sent data, the packet transmission shouldn't simply stop. Instead, send five frames of silence (0xF8, 0xFF, 0xFE) before stopping to avoid unintended Opus interpolation with subsequent transmissions.
             if consecutive_silence > 5:
                 continue
 
-            max_data_bytes = len(buffer)
-            output = (ctypes.c_char * max_data_bytes)()
-            output_len = self.opus_encoder_private.opus_encode_float(getattr(self.opus_encoder, '_state'), buffer, len(buffer) // 8, output, max_data_bytes)
-
-            packet = bytes(output[:output_len])
+            packet = await self.loop.run_in_executor(self.opus_encoder_executor, self._encode_voice, buffer)
             for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
                 if voice_client.is_connected():
                     try:
@@ -324,28 +358,47 @@ class Model:
                     except Exception:
                         traceback.print_exc()
 
+    def _set_speaking_state(self, voice_client: discord.VoiceClient, state: int, timestamp_ns: int) -> None:
+        setattr(voice_client, '_dmb_speaking', state)
+        setattr(voice_client, '_dmb_last_spoke', timestamp_ns)
+        asyncio.ensure_future(typing.cast(discord.gateway.DiscordVoiceWebSocket, voice_client.ws).speak(state), loop=self.loop)
+
+    def _encode_voice(self, buffer: bytes) -> bytes:
+        max_data_bytes = len(buffer)
+        output = (ctypes.c_char * max_data_bytes)()
+        output_len = self.opus_encoder_private.opus_encode_float(getattr(self.opus_encoder, '_state'), buffer, len(buffer) // 8, output, max_data_bytes)
+        return bytes(output[:output_len])
+
     async def run(self) -> None:
-        asyncio.ensure_future(self._encode_voice_loop())
+        try:
+            asyncio.ensure_future(self._encode_voice_loop(), loop=self.loop)
 
-        self.login_status = 'Logging in…'
-        self.logger.info(self.login_status)
-        if self.v is not None:
-            self.v.login_status_updated()
-        await self.discord_client.login(self.discord_bot_token, bot=True)
+            self.login_status = 'Logging in…'
+            self.logger.info(self.login_status)
+            if self.v is not None:
+                self.v.loop.call_soon_threadsafe(self.v.login_status_updated)
+            await self.discord_client.login(self.discord_bot_token, bot=True)
 
-        self.login_status = 'Connecting to Discord server…'
-        self.logger.info(self.login_status)
-        if self.v is not None:
-            self.v.login_status_updated()
-        asyncio.ensure_future(self.discord_client.connect())
+            self.login_status = 'Connecting to Discord server…'
+            self.logger.info(self.login_status)
+            if self.v is not None:
+                self.v.loop.call_soon_threadsafe(self.v.login_status_updated)
 
-        await self.discord_client.wait_until_ready()
+            await self.discord_client.connect()
+        finally:
+            if self.v is not None:
+                self.v.stop()
 
-    async def stop(self) -> None:
+    def stop(self) -> None:
         self.running = False
+        self.logger.info('Gracefully stopping, may take some time…')
         if self.input_stream is not None:
             self.input_stream.stop()
             self.input_stream.close()
             self.input_stream = None
-        await self.audio_queue.put(None)
+        asyncio.ensure_future(self._stop(), loop=self.loop)
+
+    async def _stop(self) -> None:
         await self.discord_client.close()
+        self.audio_queue.put_nowait(None)
+        self.opus_encoder_executor.shutdown()

@@ -26,8 +26,9 @@ if typing.TYPE_CHECKING:
 
 
 class View:
-    def __init__(self, m: model.Model) -> None:
+    def __init__(self, m: model.Model, loop: asyncio.AbstractEventLoop) -> None:
         self.m = m
+        self.loop = loop
         self.running = True
 
         self.root = tkinter.Tk()
@@ -47,7 +48,7 @@ class View:
         self.hostapi = tkinter.StringVar(self.root, '')
         self.device = tkinter.StringVar(self.root, '')
         self.bitrate = tkinter.StringVar(self.root, 128)
-        self.fec_enabled = tkinter.BooleanVar(self.root, False)
+        self.fec_enabled = tkinter.BooleanVar(self.root, True)
         self.muted = tkinter.BooleanVar(self.root, False)
 
         self.root.title('Discord Mic Bot')
@@ -132,7 +133,7 @@ class View:
         self.root.update()
         self.root.minsize(self.root.winfo_width(), self.root.winfo_height())
 
-        m.attach_view(self)
+        self.m.attach_view(self)
 
     def login_status_updated(self) -> None:
         if not self.running:
@@ -202,14 +203,14 @@ class View:
         if len(current_selections) == 0 or current_selections[0] >= len(self.channels):
             return
         current_channel = self.channels[current_selections[0]]
-        asyncio.ensure_future(self.m.join_voice(current_channel))
+        asyncio.run_coroutine_threadsafe(self.m.join_voice(current_channel), self.m.loop)
 
     def on_remove_button_pressed(self) -> None:
         current_selections: typing.Tuple[int, ...] = self.joined_list.curselection()
         if len(current_selections) == 0 or current_selections[0] >= len(self.joined):
             return
         current_channel = self.joined[current_selections[0]]
-        asyncio.ensure_future(self.m.leave_voice(current_channel))
+        asyncio.run_coroutine_threadsafe(self.m.leave_voice(current_channel), self.m.loop)
 
     def on_device_changed(self, event: tkinter.Event) -> None:
         hostapis = self.m.list_sound_hostapis()
@@ -239,21 +240,21 @@ class View:
             bitrate = min(512, max(12, int(bitrate_str)))
         except ValueError:
             bitrate = 128
-        self.m.set_bitrate(bitrate)
+        asyncio.run_coroutine_threadsafe(self.m.set_bitrate(bitrate), self.m.loop)
         self.bitrate.set(bitrate)
 
     def on_fec_changed(self) -> None:
         fec_enabled: bool = self.fec_enabled.get()
-        self.m.set_fec_enabled(fec_enabled)
+        asyncio.run_coroutine_threadsafe(self.m.set_fec_enabled(fec_enabled), self.m.loop)
 
     def on_mute_changed(self) -> None:
         muted: bool = self.muted.get()
         self.m.set_muted(muted)
 
-    async def run_loop(self) -> None:
-        try:
-            while self.running:
-                self.root.update()
-                await asyncio.sleep(1 / 30)
-        finally:
-            await self.m.stop()
+    async def run(self) -> None:
+        while self.running:
+            self.root.update()
+            await asyncio.sleep(1 / 30)
+
+    def stop(self) -> None:
+        self.running = False

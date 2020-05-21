@@ -15,11 +15,42 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
+import concurrent.futures
+import threading
 from . import model
 from . import view
 
 
-async def main() -> None:
+class ModelThread(threading.Thread):
+    def __init__(self, discord_bot_token: str) -> None:
+        super().__init__()
+        self.discord_bot_token = discord_bot_token
+        self.init_finished: concurrent.futures.Future[model.Model] = concurrent.futures.Future()
+
+    def run(self) -> None:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(self._run(loop))
+
+    async def _run(self, loop: asyncio.AbstractEventLoop) -> None:
+        m = model.Model(self.discord_bot_token, loop)
+        self.init_finished.set_result(m)
+        await m.run()
+
+
+class UIThread:
+    def __init__(self, m: model.Model) -> None:
+        self.m = m
+
+    def run(self) -> None:
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(self._run(loop))
+
+    async def _run(self, loop: asyncio.AbstractEventLoop) -> None:
+        v = view.View(self.m, loop)
+        await v.run()
+
+
+def main() -> None:
     try:
         with open('token.txt', 'r') as token_file:
             discord_bot_token = token_file.read().strip()
@@ -30,9 +61,13 @@ async def main() -> None:
         print('Please put your Discord bot token in token.txt.')
         return
 
-    m = model.Model(discord_bot_token)
-    v = view.View(m)
+    model_thread = ModelThread(discord_bot_token)
+    model_thread.start()
+    m = model_thread.init_finished.result()
 
-    f1 = v.run_loop()
-    f2 = m.run()
-    await asyncio.wait((f1, f2))
+    try:
+        ui_thread = UIThread(m)
+        ui_thread.run()
+    finally:
+        m.stop()
+        model_thread.join()
