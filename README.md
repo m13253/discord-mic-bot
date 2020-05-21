@@ -20,6 +20,8 @@ cd /path/to/discord-mic-bot
 pip3 install -r requirements.txt
 ```
 
+If on Linux, you also need to install libopus and libportaudio.
+
 ## Obtaining a bot token
 
 You need to obtain a bot token to log into Discord's server.
