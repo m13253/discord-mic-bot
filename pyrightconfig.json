@@ -1,4 +1,5 @@
 {
-    "typeCheckingMode": "strict",
-    "reportImportCycles": false
+    "reportImportCycles": false,
+    "reportUnknownMemberType": "none",
+    "typeCheckingMode": "strict"
 }

@@ -14,19 +14,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from __future__ import annotations
+#from __future__ import annotations
 import asyncio
-import discord  # type: ignore
 import tkinter
 import tkinter.messagebox
 import tkinter.ttk
 import typing
+
+import discord  # type: ignore
 if typing.TYPE_CHECKING:
     from . import model
 
 
 class View:
-    def __init__(self, m: model.Model, loop: asyncio.AbstractEventLoop) -> None:
+    def __init__(self, m: 'model.Model', loop: asyncio.AbstractEventLoop) -> None:
         self.m = m
         self.loop = loop
         self.running = True
