@@ -322,16 +322,19 @@ class Model:
 
     async def _encode_voice_loop(self) -> None:
         consecutive_silence = 0
+        timestamp_frames = 0
 
         try:
             while self.running:
                 buffer = await self.audio_queue.get()
                 if buffer is None:
                     return
+                frame_size = len(buffer) // 8
+
                 try:
-                    timestamp = time.monotonic_ns()
+                    timestamp_ns = time.monotonic_ns()
                 except AttributeError:
-                    timestamp = int(time.monotonic() * 1000000000)
+                    timestamp_ns = int(time.monotonic() * 1000000000)
 
                 if self.muted:
                     buffer = bytes(len(buffer))
@@ -345,36 +348,58 @@ class Model:
                     for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
                         if voice_client.is_connected():
                             voice_client_name: str = typing.cast(discord.VoiceChannel, voice_client.channel).name
-                            if getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none) != discord.SpeakingState.soundshare:
+                            if getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none) != discord.SpeakingState.voice:
                                 self.logger.info('Start speaking on: {}'.format(voice_client_name))
-                                self._set_speaking_state(voice_client, discord.SpeakingState.soundshare, timestamp)
-                            elif timestamp - getattr(voice_client, '_dmb_last_spoke', timestamp) >= 60000000000:
+                                self._set_speaking_state(voice_client, discord.SpeakingState.voice, timestamp_ns)
+                            elif timestamp_ns - getattr(voice_client, '_dmb_last_spoke', timestamp_ns) >= 60000000000:
                                 self.logger.info('Continue speaking on: {}'.format(voice_client_name))
-                                self._set_speaking_state(voice_client, discord.SpeakingState.soundshare, timestamp)
+                                self._set_speaking_state(voice_client, discord.SpeakingState.voice, timestamp_ns)
                 else:
                     for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
                         if voice_client.is_connected():
                             voice_client_name: str = typing.cast(discord.VoiceChannel, voice_client.channel).name
                             if getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none) != discord.SpeakingState.none:
                                 self.logger.info('Stop speaking on: {}'.format(voice_client_name))
-                                self._set_speaking_state(voice_client, discord.SpeakingState.none, timestamp)
+                                self._set_speaking_state(voice_client, discord.SpeakingState.none, timestamp_ns)
 
                 # When there's a break in the sent data, the packet transmission shouldn't simply stop. Instead, send five frames of silence (0xF8, 0xFF, 0xFE) before stopping to avoid unintended Opus interpolation with subsequent transmissions.
-                if consecutive_silence > 5:
-                    continue
+                # -- Discord SDK
+                if consecutive_silence <= 5:
+                    opus_packet = await self.loop.run_in_executor(self.opus_encoder_executor, self._encode_voice, buffer)
+                    for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
+                        if voice_client.is_connected():
+                            send_func = self._send_audio_packet(voice_client, opus_packet, timestamp_frames)
+                            self.loop.call_soon(send_func)
+                            #self.loop.call_later(0.01, send_func)
 
-                packet = await self.loop.run_in_executor(self.opus_encoder_executor, self._encode_voice, buffer)
-                for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
-                    if voice_client.is_connected():
-                        try:
-                            voice_client.send_audio_packet(packet, encode=False)
-                        except Exception:
-                            traceback.print_exc()
+                timestamp_frames = (timestamp_frames + frame_size) & 0xffffffff
+
         except Exception:
             traceback.print_exc()
         finally:
             if self.v is not None:
                 self.v.stop()
+
+    # A rewrite of discord.VoiceClient.send_audio_packet.
+    # The timestamp is supplied from outside so all silent frames get counted.
+    def _send_audio_packet(self, voice_client: discord.VoiceClient, opus_packet: bytes, timestamp_frames: int) -> typing.Callable[[], None]:
+        sock = voice_client.socket
+        endpoint_ip = voice_client.endpoint_ip
+        endpoint_port: int = voice_client.voice_port  # type: ignore
+        sequence = voice_client.sequence
+
+        voice_client.timestamp = timestamp_frames
+        udp_packet = getattr(voice_client, '_get_voice_packet')(opus_packet)
+        voice_client.sequence = (voice_client.sequence + 1) & 0xffff
+
+        def send() -> None:
+            if sock is None:
+                return
+            try:
+                sock.sendto(udp_packet, (endpoint_ip, endpoint_port))
+            except BlockingIOError:
+                self.logger.warning('Network too slow, a packet is dropped. (seq={}, ts={})'.format(sequence, timestamp_frames))
+        return send
 
     def _set_speaking_state(self, voice_client: discord.VoiceClient, state: int, timestamp_ns: int) -> None:
         setattr(voice_client, '_dmb_speaking', state)
