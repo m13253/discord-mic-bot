@@ -23,6 +23,7 @@ import logging
 import time
 import traceback
 import typing
+import os
 
 import discord  # type: ignore
 import discord.gateway  # type: ignore
@@ -55,7 +56,7 @@ class Model:
         self.logger.addHandler(logging_handler)
 
         self.discord_bot_token = discord_bot_token
-        self.discord_client: discord.Client = discord.Client(loop=self.loop, max_messages=None, assume_unsync_clock=True)
+        self.discord_client: discord.Client = discord.Client(loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy'))
         self.login_status = 'Starting up…'
         self.current_viewing_guild: typing.Optional[discord.Guild] = None
 
@@ -399,6 +400,7 @@ class Model:
                 sock.sendto(udp_packet, (endpoint_ip, endpoint_port))
             except BlockingIOError:
                 self.logger.warning('Network too slow, a packet is dropped. (seq={}, ts={})'.format(sequence, timestamp_frames))
+
         return send
 
     def _set_speaking_state(self, voice_client: discord.VoiceClient, state: int, timestamp_ns: int) -> None:
