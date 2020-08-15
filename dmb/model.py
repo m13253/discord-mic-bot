@@ -355,7 +355,7 @@ class Model:
                 else:
                     consecutive_silence = 0
 
-                asyncio.ensure_future(self.vu_meter.push(buffer), loop=self.loop)
+                vu_meter_future = self.vu_meter.push(buffer)
 
                 if consecutive_silence <= 1:
                     for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
@@ -386,6 +386,7 @@ class Model:
                             #self.loop.call_later(0.01, send_func)
 
                 timestamp_frames = (timestamp_frames + frame_size) & 0xffffffff
+                await vu_meter_future
 
         except Exception:
             traceback.print_exc()
