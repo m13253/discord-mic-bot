@@ -65,6 +65,27 @@ For Linux or macOS users, `discord-mic-bot` is the entry point.
 
 For Windows users, `discord-mic-bot.cmd` is the entry point.
 
+## Monitoring loudness
+
+The loudness meter is compatible to EBU R 128 / ITU-R BS.1770, showing the
+perceptible loudness for the last 0.4 seconds.
+
+```
+-70 ================================= -32 ============= -14 ==== -5 === 0 LUFS
+ |                Blue                 |      Green      | Yellow | Red |
+-70 ================================= -32 ============= -14 ==== -5 === 0 LUFS
+```
+* The left end is calibrated to -70 LUFS.
+* Between blue and green is -32 LUFS.
+* Between green and yellow is -14 LUFS.
+* Between yellow and red is -5 LUFS.
+* The right end is calibrated to 0 LUFS.
+
+For music streaming, it is recommended to aim for -14 LUFS.
+
+But if you are playing the background music while people are speaking, try to
+lower down an extra 20 dB. **(i.e., aim for -34 LUFS.)**
+
 ## License
 
 This program is free software: you can redistribute it and/or modify it under
