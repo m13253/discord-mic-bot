@@ -16,6 +16,7 @@
 
 #from __future__ import annotations
 import asyncio
+import math
 import tkinter
 import tkinter.messagebox
 import tkinter.ttk
@@ -27,6 +28,8 @@ if typing.TYPE_CHECKING:
 
 
 class View:
+    __slots__ = ['m', 'loop', 'running', 'root', 'login_status', 'guilds', 'channels', 'joined', 'hostapi', 'device', 'bitrate', 'fec_enabled', 'muted', 'frame', 'hostapi_combobox', 'device_combobox', 'guilds_list', 'channels_list', 'joined_list', 'vu_meter', 'vu_meter_rects']
+
     def __init__(self, m: 'model.Model', loop: asyncio.AbstractEventLoop) -> None:
         self.m = m
         self.loop = loop
@@ -75,10 +78,8 @@ class View:
         bitrate_combobox.bind('<FocusOut>', self.on_bitrate_changed)
         bitrate_combobox.bind('<Return>', self.on_bitrate_changed)
         tkinter.ttk.Label(top_row, text='Kbps').grid(column=5, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
-
         # FEC only works for voice, not music, and from my experience it hurts music quality severely.
-        tkinter.ttk.Checkbutton(top_row, text='FEC (voice only)', variable=self.fec_enabled, command=self.on_fec_changed).grid(column=6, row=0, padx=(4, 4), pady=(4, 4), sticky=tkinter.NSEW)
-        tkinter.ttk.Checkbutton(top_row, text='Mute', variable=self.muted, command=self.on_mute_changed).grid(column=7, row=0, padx=(4, 16), pady=(4, 4), sticky=tkinter.NSEW)
+        tkinter.ttk.Checkbutton(top_row, text='FEC (voice only)', variable=self.fec_enabled, command=self.on_fec_changed).grid(column=6, row=0, padx=(4, 16), pady=(4, 4), sticky=tkinter.NSEW)
 
         top_row.grid_columnconfigure(1, weight=1)
         top_row.grid_columnconfigure(2, weight=2)
@@ -88,7 +89,7 @@ class View:
         tkinter.ttk.Label(self.frame, text='Joined:').grid(column=3, row=2, padx=(0, 16), pady=(4, 0), sticky=tkinter.NSEW)
 
         guilds_list_panel = tkinter.ttk.Frame(self.frame)
-        guilds_list_panel.grid(column=0, row=3, padx=(16, 8), pady=(0, 16), sticky=tkinter.NSEW)
+        guilds_list_panel.grid(column=0, row=3, padx=(16, 8), pady=(0, 4), sticky=tkinter.NSEW)
         self.guilds_list = tkinter.Listbox(guilds_list_panel, height=16)
         self.guilds_list.grid(column=0, row=0, sticky=tkinter.NSEW)
         self.guilds_list.bind('<<ListboxSelect>>', self.on_guild_changed)
@@ -99,7 +100,7 @@ class View:
         guilds_list_panel.grid_columnconfigure(0, weight=1)
 
         channels_list_panel = tkinter.ttk.Frame(self.frame)
-        channels_list_panel.grid(column=1, row=3, padx=(8, 0), pady=(0, 16), sticky=tkinter.NSEW)
+        channels_list_panel.grid(column=1, row=3, padx=(8, 0), pady=(0, 4), sticky=tkinter.NSEW)
         self.channels_list = tkinter.Listbox(channels_list_panel, height=16)
         self.channels_list.grid(column=0, row=0, sticky=tkinter.NSEW)
         channels_list_scroll = tkinter.ttk.Scrollbar(channels_list_panel, orient=tkinter.VERTICAL, command=self.channels_list.yview)
@@ -109,7 +110,7 @@ class View:
         channels_list_panel.grid_columnconfigure(0, weight=1)
 
         joined_list_panel = tkinter.ttk.Frame(self.frame)
-        joined_list_panel.grid(column=3, row=3, padx=(0, 16), pady=(0, 16), sticky=tkinter.NSEW)
+        joined_list_panel.grid(column=3, row=3, padx=(0, 16), pady=(0, 4), sticky=tkinter.NSEW)
         self.joined_list = tkinter.Listbox(joined_list_panel, height=16)
         self.joined_list.grid(column=0, row=0, sticky=tkinter.NSEW)
         joined_list_scroll = tkinter.ttk.Scrollbar(joined_list_panel, orient=tkinter.VERTICAL, command=self.joined_list.yview)
@@ -119,9 +120,34 @@ class View:
         joined_list_panel.grid_columnconfigure(0, weight=1)
 
         add_remove_buttons = tkinter.ttk.Frame(self.frame)
-        add_remove_buttons.grid(column=2, row=3, pady=(0, 16))
+        add_remove_buttons.grid(column=2, row=3, pady=(0, 4))
         tkinter.ttk.Button(add_remove_buttons, text='→', width=2, command=self.on_add_button_pressed).grid(column=0, row=0, pady=4, sticky=tkinter.S)
         tkinter.ttk.Button(add_remove_buttons, text='←', width=2, command=self.on_remove_button_pressed).grid(column=0, row=1, pady=4, sticky=tkinter.N)
+
+        bottom_row = tkinter.ttk.Frame(self.frame)
+        bottom_row.grid(column=0, row=4, columnspan=4, sticky=tkinter.NSEW)
+        self.vu_meter = tkinter.Canvas(bottom_row, background='black', height=16, highlightthickness=0)
+        self.vu_meter.grid(column=0, row=0, padx=(16, 4), pady=(8, 16), sticky=tkinter.NSEW)
+        self.vu_meter_rects = [
+            self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#00425c", width=0),
+            self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#25421f", width=0),
+            self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#443b14", width=0),
+            self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#5c2d2a", width=0),
+            self.vu_meter.create_rectangle((0, 9, 0, 16), fill="#00425c", width=0),
+            self.vu_meter.create_rectangle((0, 9, 0, 16), fill="#25421f", width=0),
+            self.vu_meter.create_rectangle((0, 9, 0, 16), fill="#443b14", width=0),
+            self.vu_meter.create_rectangle((0, 9, 0, 16), fill="#5c2d2a", width=0),
+            self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#5dacd5", width=0, state=tkinter.HIDDEN),
+            self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#82ae77", width=0, state=tkinter.HIDDEN),
+            self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#b2a165", width=0, state=tkinter.HIDDEN),
+            self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#d98e86", width=0, state=tkinter.HIDDEN),
+            self.vu_meter.create_rectangle((0, 9, 0, 16), fill="#5dacd5", width=0, state=tkinter.HIDDEN),
+            self.vu_meter.create_rectangle((0, 9, 0, 16), fill="#82ae77", width=0, state=tkinter.HIDDEN),
+            self.vu_meter.create_rectangle((0, 9, 0, 16), fill="#b2a165", width=0, state=tkinter.HIDDEN),
+            self.vu_meter.create_rectangle((0, 9, 0, 16), fill="#d98e86", width=0, state=tkinter.HIDDEN),
+        ]
+        tkinter.ttk.Checkbutton(bottom_row, text='Mute', variable=self.muted, command=self.on_mute_changed).grid(column=2, row=0, padx=(4, 16), pady=(8, 16), sticky=tkinter.NSEW)
+        bottom_row.grid_columnconfigure(0, weight=1)
 
         self.frame.grid_rowconfigure(3, weight=1)
         self.frame.grid_columnconfigure(0, weight=1)
@@ -135,6 +161,119 @@ class View:
         self.root.minsize(self.root.winfo_width(), self.root.winfo_height())
 
         self.m.attach_view(self)
+
+    def _round_bounding_box(self, x1: float, y1: float, x2: float, y2: float) -> typing.Tuple[int, int, int, int]:
+        return round(x1), round(y1), round(x2), round(y2)
+
+    def update_vumeter(self) -> None:
+        if not self.running:
+            return
+        width, height = self.vu_meter.winfo_width(), self.vu_meter.winfo_height()
+        width_per_db = width / 70
+        y_coords = math.ceil(height / 2 - 1), math.floor(height / 2 + 1)
+        self.vu_meter.config(width=width, height=height)
+
+        lufs = self.m.vu_meter.momentary_lufs()
+        loudness = lufs[0] + 73, lufs[1] + 73
+
+        self.vu_meter.coords(self.vu_meter_rects[0], self._round_bounding_box(0, 0, 38 * width_per_db, y_coords[0]))
+        self.vu_meter.coords(self.vu_meter_rects[1], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
+        self.vu_meter.coords(self.vu_meter_rects[2], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0]))
+        self.vu_meter.coords(self.vu_meter_rects[3], self._round_bounding_box(65 * width_per_db, 0, width, y_coords[0]))
+        self.vu_meter.coords(self.vu_meter_rects[4], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
+        self.vu_meter.coords(self.vu_meter_rects[5], self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height))
+        self.vu_meter.coords(self.vu_meter_rects[6], self._round_bounding_box(56 * width_per_db, y_coords[1], 65 * width_per_db, height))
+        self.vu_meter.coords(self.vu_meter_rects[7], self._round_bounding_box(65 * width_per_db, y_coords[1], width, height))
+
+        if loudness[0] <= 0:
+            self.vu_meter.itemconfig(self.vu_meter_rects[8], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[9], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[10], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[11], state=tkinter.HIDDEN)
+        elif loudness[0] <= 38:
+            self.vu_meter.coords(self.vu_meter_rects[8], self._round_bounding_box(0, 0, loudness[0] * width_per_db, y_coords[0]))
+            self.vu_meter.itemconfig(self.vu_meter_rects[8], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[9], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[10], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[11], state=tkinter.HIDDEN)
+        elif loudness[0] <= 56:
+            self.vu_meter.coords(self.vu_meter_rects[8], self._round_bounding_box(0, 0, loudness[0] * width_per_db, y_coords[0]))
+            self.vu_meter.coords(self.vu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]))
+            self.vu_meter.itemconfig(self.vu_meter_rects[8], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[9], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[10], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[11], state=tkinter.HIDDEN)
+        elif loudness[0] <= 65:
+            self.vu_meter.coords(self.vu_meter_rects[8], self._round_bounding_box(0, 0, 38 * width_per_db, y_coords[0]))
+            self.vu_meter.coords(self.vu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
+            self.vu_meter.coords(self.vu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]))
+            self.vu_meter.itemconfig(self.vu_meter_rects[8], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[9], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[10], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[11], state=tkinter.HIDDEN)
+        elif loudness[0] <= 70:
+            self.vu_meter.coords(self.vu_meter_rects[8], self._round_bounding_box(0, 0, 56 * width_per_db, y_coords[0]))
+            self.vu_meter.coords(self.vu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
+            self.vu_meter.coords(self.vu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0]))
+            self.vu_meter.coords(self.vu_meter_rects[11], self._round_bounding_box(65 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]))
+            self.vu_meter.itemconfig(self.vu_meter_rects[8], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[9], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[10], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[11], state=tkinter.NORMAL)
+        else:
+            self.vu_meter.coords(self.vu_meter_rects[8], self._round_bounding_box(0, 0, y_coords[0], 38 * width_per_db))
+            self.vu_meter.coords(self.vu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
+            self.vu_meter.coords(self.vu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0]))
+            self.vu_meter.coords(self.vu_meter_rects[11], self._round_bounding_box(65 * width_per_db, 0, width, y_coords[0]))
+            self.vu_meter.itemconfig(self.vu_meter_rects[8], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[9], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[10], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[11], state=tkinter.NORMAL)
+
+        if loudness[1] <= 0:
+            self.vu_meter.itemconfig(self.vu_meter_rects[12], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[13], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[14], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[15], state=tkinter.HIDDEN)
+        elif loudness[1] <= 38:
+            self.vu_meter.coords(self.vu_meter_rects[12], self._round_bounding_box(0, y_coords[1], loudness[1] * width_per_db, height))
+            self.vu_meter.itemconfig(self.vu_meter_rects[12], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[13], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[14], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[15], state=tkinter.HIDDEN)
+        elif loudness[1] <= 56:
+            self.vu_meter.coords(self.vu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
+            self.vu_meter.coords(self.vu_meter_rects[13], self._round_bounding_box(38 * width_per_db, y_coords[1], loudness[1] * width_per_db, height))
+            self.vu_meter.itemconfig(self.vu_meter_rects[12], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[13], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[14], state=tkinter.HIDDEN)
+            self.vu_meter.itemconfig(self.vu_meter_rects[15], state=tkinter.HIDDEN)
+        elif loudness[1] <= 65:
+            self.vu_meter.coords(self.vu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
+            self.vu_meter.coords(self.vu_meter_rects[13], self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height))
+            self.vu_meter.coords(self.vu_meter_rects[14], self._round_bounding_box(56 * width_per_db, y_coords[1], loudness[1] * width_per_db, height))
+            self.vu_meter.itemconfig(self.vu_meter_rects[12], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[13], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[14], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[15], state=tkinter.HIDDEN)
+        elif loudness[1] <= 70:
+            self.vu_meter.coords(self.vu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
+            self.vu_meter.coords(self.vu_meter_rects[13], self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height))
+            self.vu_meter.coords(self.vu_meter_rects[14], self._round_bounding_box(56 * width_per_db, y_coords[1], 65 * width_per_db, height))
+            self.vu_meter.coords(self.vu_meter_rects[15], self._round_bounding_box(65 * width_per_db, y_coords[1], loudness[1] * width_per_db, height))
+            self.vu_meter.itemconfig(self.vu_meter_rects[12], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[13], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[14], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[15], state=tkinter.NORMAL)
+        else:
+            self.vu_meter.coords(self.vu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
+            self.vu_meter.coords(self.vu_meter_rects[13], self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height))
+            self.vu_meter.coords(self.vu_meter_rects[14], self._round_bounding_box(56 * width_per_db, y_coords[1], 65 * width_per_db, height))
+            self.vu_meter.coords(self.vu_meter_rects[15], self._round_bounding_box(65 * width_per_db, y_coords[1], width, height))
+            self.vu_meter.itemconfig(self.vu_meter_rects[12], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[13], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[14], state=tkinter.NORMAL)
+            self.vu_meter.itemconfig(self.vu_meter_rects[15], state=tkinter.NORMAL)
 
     def login_status_updated(self) -> None:
         if not self.running:
@@ -254,6 +393,7 @@ class View:
 
     async def run(self) -> None:
         while self.running:
+            self.update_vumeter()
             self.root.update()
             await asyncio.sleep(1 / 30)
 

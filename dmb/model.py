@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #from __future__ import annotations
+import array
 import asyncio
 import asyncio.queues
 import concurrent.futures
@@ -28,11 +29,14 @@ import os
 import discord  # type: ignore
 import discord.gateway  # type: ignore
 import sounddevice  # type: ignore
+from . import vumeter
 if typing.TYPE_CHECKING:
     from . import view
 
 
 class SoundDevice:
+    __slots__ = ['name', 'is_default']
+
     def __init__(self, name: str, is_default: bool) -> None:
         self.name = name
         self.is_default = is_default
@@ -44,6 +48,9 @@ class SoundDevice:
 
 
 class Model:
+    __slots__ = ['v', 'loop', 'running', 'logger', 'discord_bot_token', 'discord_client', 'login_status', 'current_viewing_guild', 'input_stream', 'audio_warning_count', 'audio_queue', 'muted', 'opus_encoder', 'opus_encoder_private', 'opus_encoder_executor', 'vu_meter']
+    muted_frame = array.array('f', [0.0] * (48000 * 20 // 1000 * 2))
+
     def __init__(self, discord_bot_token: str, loop: asyncio.AbstractEventLoop) -> None:
         self.v: typing.Optional['view.View'] = None
         self.loop = loop
@@ -63,7 +70,7 @@ class Model:
         self.input_stream: typing.Optional[sounddevice.RawInputStream] = None
         self.audio_warning_count = 0
         # 2048 / 960 == 3, should work even with bad-designed audio systems (e.g. Windows MME)
-        self.audio_queue: asyncio.Queue[typing.Optional[bytes]] = asyncio.Queue(3, loop=self.loop)
+        self.audio_queue: asyncio.Queue[typing.Optional[array.array]] = asyncio.Queue(3, loop=self.loop)
         self.muted = False
 
         self.opus_encoder = discord.opus.Encoder()
@@ -75,6 +82,8 @@ class Model:
         self.opus_encoder.set_fec(True)
         self.opus_encoder.set_expected_packet_loss_percent(0.15)
         self.opus_encoder_executor = concurrent.futures.ThreadPoolExecutor(1)
+
+        self.vu_meter = vumeter.VUMeter(self.loop)
 
         self._set_up_events()
 
@@ -309,12 +318,13 @@ class Model:
             self.logger.warn('Audio frame size mismatch: {} != {}.'.format(frames, 48000 * 20 // 1000), self.audio_warning_count)
 
         if self.running:
-            indata = bytes(indata)[:frames * 8]
-            asyncio.run_coroutine_threadsafe(self._recording_callback_main_thread(indata), self.loop).result()
+            buffer = array.array('f')
+            buffer.frombytes(bytes(indata)[:frames * 8])
+            asyncio.run_coroutine_threadsafe(self._recording_callback_main_thread(buffer), self.loop).result()
 
-    async def _recording_callback_main_thread(self, indata: bytes) -> None:
+    async def _recording_callback_main_thread(self, buffer: array.array) -> None:
         try:
-            self.audio_queue.put_nowait(indata)
+            self.audio_queue.put_nowait(buffer)
         except asyncio.queues.QueueFull:
             if not self.running:
                 return
@@ -330,7 +340,7 @@ class Model:
                 buffer = await self.audio_queue.get()
                 if buffer is None:
                     return
-                frame_size = len(buffer) // 8
+                frame_size = len(buffer) // 2
 
                 try:
                     timestamp_ns = time.monotonic_ns()
@@ -338,12 +348,14 @@ class Model:
                     timestamp_ns = int(time.monotonic() * 1000000000)
 
                 if self.muted:
-                    buffer = bytes(len(buffer))
+                    buffer = self.muted_frame
                     consecutive_silence += 1
                 elif buffer.count(0) == len(buffer):
                     consecutive_silence += 1
                 else:
                     consecutive_silence = 0
+
+                asyncio.ensure_future(self.vu_meter.push(buffer), loop=self.loop)
 
                 if consecutive_silence <= 1:
                     for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
@@ -366,7 +378,7 @@ class Model:
                 # When there's a break in the sent data, the packet transmission shouldn't simply stop. Instead, send five frames of silence (0xF8, 0xFF, 0xFE) before stopping to avoid unintended Opus interpolation with subsequent transmissions.
                 # -- Discord SDK
                 if consecutive_silence <= 5:
-                    opus_packet = await self.loop.run_in_executor(self.opus_encoder_executor, self._encode_voice, buffer)
+                    opus_packet = await self.loop.run_in_executor(self.opus_encoder_executor, self._encode_voice, buffer.tobytes())
                     for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
                         if voice_client.is_connected():
                             send_func = self._send_audio_packet(voice_client, opus_packet, timestamp_frames)

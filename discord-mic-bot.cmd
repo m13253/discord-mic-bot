@@ -1,3 +1,3 @@
 @echo off
 
-python -m dmb %*
+python -m dmb %* || pause

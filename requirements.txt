@@ -1,2 +1,4 @@
 discord.py[voice]
+numpy
+scipy
 sounddevice
