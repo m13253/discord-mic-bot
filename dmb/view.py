@@ -212,7 +212,7 @@ class View:
             self.vu_meter.itemconfig(self.vu_meter_rects[10], state=tkinter.NORMAL)
             self.vu_meter.itemconfig(self.vu_meter_rects[11], state=tkinter.HIDDEN)
         elif loudness[0] <= 70:
-            self.vu_meter.coords(self.vu_meter_rects[8], self._round_bounding_box(0, 0, 56 * width_per_db, y_coords[0]))
+            self.vu_meter.coords(self.vu_meter_rects[8], self._round_bounding_box(0, 0, 38 * width_per_db, y_coords[0]))
             self.vu_meter.coords(self.vu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
             self.vu_meter.coords(self.vu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0]))
             self.vu_meter.coords(self.vu_meter_rects[11], self._round_bounding_box(65 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]))
@@ -221,7 +221,7 @@ class View:
             self.vu_meter.itemconfig(self.vu_meter_rects[10], state=tkinter.NORMAL)
             self.vu_meter.itemconfig(self.vu_meter_rects[11], state=tkinter.NORMAL)
         else:
-            self.vu_meter.coords(self.vu_meter_rects[8], self._round_bounding_box(0, 0, y_coords[0], 38 * width_per_db))
+            self.vu_meter.coords(self.vu_meter_rects[8], self._round_bounding_box(0, 0, 38 * width_per_db, y_coords[0]))
             self.vu_meter.coords(self.vu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
             self.vu_meter.coords(self.vu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0]))
             self.vu_meter.coords(self.vu_meter_rects[11], self._round_bounding_box(65 * width_per_db, 0, width, y_coords[0]))
