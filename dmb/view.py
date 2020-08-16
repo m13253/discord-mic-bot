@@ -174,7 +174,7 @@ class View:
         self.vu_meter.config(width=width, height=height)
 
         lufs = self.m.vu_meter.momentary_lufs()
-        loudness = lufs[0] + 73, lufs[1] + 73
+        loudness = lufs[0] + 73.010299956639812, lufs[1] + 73.010299956639812  # 70 + 10*log10(2)
 
         self.vu_meter.coords(self.vu_meter_rects[0], self._round_bounding_box(0, 0, 38 * width_per_db, y_coords[0]))
         self.vu_meter.coords(self.vu_meter_rects[1], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))

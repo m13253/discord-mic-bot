@@ -48,14 +48,18 @@ class VUMeter:
     def _push(self, buffer: array.array) -> None:
         frame_size = len(buffer) // 2
         x = numpy.array(buffer).reshape((2, -1), order='F')
-        numpy.nan_to_num(x, copy=False, posinf=1.0, neginf=-1.0)
+        numpy.nan_to_num(x, copy=False)
+        if not numpy.all(numpy.isfinite(self.zl)):
+            self.zl = scipy.signal.lfilter_zi(self.coeff_b, self.coeff_a)
+        if not numpy.all(numpy.isfinite(self.zr)):
+            self.zr = scipy.signal.lfilter_zi(self.coeff_b, self.coeff_a)
         yl, self.zl = scipy.signal.lfilter(self.coeff_b, self.coeff_a, x[0], zi=self.zl)
         yr, self.zr = scipy.signal.lfilter(self.coeff_b, self.coeff_a, x[1], zi=self.zr)
         with self.lock:
             self.buffer[:, :-frame_size] = self.buffer[:, frame_size:]
             numpy.square(yl, out=self.buffer[0, -frame_size:])
             numpy.square(yr, out=self.buffer[1, -frame_size:])
-            numpy.nan_to_num(self.buffer[-frame_size:], copy=False, posinf=1.0, neginf=0.0)
+            numpy.nan_to_num(self.buffer[-frame_size:], copy=False)
 
     def momentary_lufs(self) -> typing.Tuple[float, float]:
         with self.lock:
