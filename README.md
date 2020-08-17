@@ -17,7 +17,7 @@ discord-mic-bot.
 Then, in terminal or command prompt, type:
 ```sh
 cd /path/to/discord-mic-bot
-pip3 install -r requirements.txt
+pip3 install -r requirements.txt --upgrade
 ```
 
 If on Linux, you also need to install libopus and libportaudio.
