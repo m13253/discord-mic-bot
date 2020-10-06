@@ -14,7 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#from __future__ import annotations
 import array
 import asyncio
 import asyncio.queues
@@ -63,14 +62,14 @@ class Model:
         self.logger.addHandler(logging_handler)
 
         self.discord_bot_token = discord_bot_token
-        self.discord_client: discord.Client = discord.Client(loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy'))
+        self.discord_client = discord.Client(loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy'))
         self.login_status = 'Starting up…'
         self.current_viewing_guild: typing.Optional[discord.Guild] = None
 
         self.input_stream: typing.Optional[sounddevice.RawInputStream] = None
         self.audio_warning_count = 0
         # 2048 / 960 == 3, should work even with bad-designed audio systems (e.g. Windows MME)
-        self.audio_queue: asyncio.Queue[typing.Optional[array.array]] = asyncio.Queue(3, loop=self.loop)
+        self.audio_queue: asyncio.Queue[typing.Optional['array.array[float]']] = asyncio.Queue(3, loop=self.loop)
         self.muted = False
 
         self.opus_encoder = discord.opus.Encoder()
@@ -108,8 +107,8 @@ class Model:
         self.discord_client.event(on_disconnect)
 
         async def on_ready() -> None:
-            user: typing.Optional[discord.ClientUser] = typing.cast(typing.Any, self.discord_client.user)
-            username: str = user.name if user is not None else ''
+            user = self.discord_client.user
+            username = typing.cast(str, user.name) if user is not None else ''
             self.login_status = 'Logged in as: {}'.format(username)
             self.logger.info(self.login_status)
             if self.v is not None:
@@ -119,8 +118,8 @@ class Model:
         self.discord_client.event(on_ready)
 
         async def on_resumed() -> None:
-            user: typing.Optional[discord.ClientUser] = typing.cast(typing.Any, self.discord_client.user)
-            username: str = user.name if user is not None else ''
+            user = self.discord_client.user
+            username = typing.cast(str, user.name) if user is not None else ''
             self.login_status = 'Logged in as: {}'.format(username)
             self.logger.info(self.login_status)
             if self.v is not None:
@@ -277,7 +276,7 @@ class Model:
         else:
             return
 
-        self.input_stream = sounddevice.RawInputStream(samplerate=48000, blocksize=48000 * 20 // 1000, device=device_id, channels=2, dtype='float32', latency='low', callback=self._recording_callback, clip_off=True, dither_off=False, never_drop_input=False)
+        self.input_stream = sounddevice.RawInputStream(samplerate=48000, blocksize=48000 * 20 // 1000, device=device_id, channels=2, dtype='float32', latency='low', callback=self._recording_callback, clip_off=True, dither_off=True, never_drop_input=False)
         try:
             self.input_stream.start()
         except Exception:
@@ -322,7 +321,7 @@ class Model:
             buffer.frombytes(bytes(indata)[:frames * 8])
             asyncio.run_coroutine_threadsafe(self._recording_callback_main_thread(buffer), self.loop).result()
 
-    async def _recording_callback_main_thread(self, buffer: array.array) -> None:
+    async def _recording_callback_main_thread(self, buffer: 'array.array[float]') -> None:
         try:
             self.audio_queue.put_nowait(buffer)
         except asyncio.queues.QueueFull:
@@ -383,7 +382,7 @@ class Model:
                         if voice_client.is_connected():
                             send_func = self._send_audio_packet(voice_client, opus_packet, timestamp_frames)
                             self.loop.call_soon(send_func)
-                            #self.loop.call_later(0.01, send_func)
+                            # self.loop.call_later(0.01, send_func)
 
                 timestamp_frames = (timestamp_frames + frame_size) & 0xffffffff
                 await vu_meter_future
@@ -419,7 +418,7 @@ class Model:
     def _set_speaking_state(self, voice_client: discord.VoiceClient, state: int, timestamp_ns: int) -> None:
         setattr(voice_client, '_dmb_speaking', state)
         setattr(voice_client, '_dmb_last_spoke', timestamp_ns)
-        asyncio.ensure_future(typing.cast(discord.gateway.DiscordVoiceWebSocket, voice_client.ws).speak(state), loop=self.loop)
+        asyncio.ensure_future(voice_client.ws.speak(state), loop=self.loop)
 
     def _encode_voice(self, buffer: bytes) -> bytes:
         max_data_bytes = len(buffer)

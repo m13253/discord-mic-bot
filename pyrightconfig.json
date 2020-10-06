@@ -1,5 +1,6 @@
 {
     "reportImportCycles": false,
     "reportUnknownMemberType": "none",
-    "typeCheckingMode": "strict"
+    "typeCheckingMode": "strict",
+    "useLibraryCodeForTypes": true
 }

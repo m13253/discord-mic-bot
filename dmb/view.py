@@ -14,7 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#from __future__ import annotations
 import asyncio
 import math
 import tkinter
@@ -51,7 +50,7 @@ class View:
         self.joined: typing.List[discord.VoiceChannel] = []
         self.hostapi = tkinter.StringVar(self.root, '')
         self.device = tkinter.StringVar(self.root, '')
-        self.bitrate = tkinter.StringVar(self.root, 128)
+        self.bitrate = tkinter.StringVar(self.root, '128')
         self.fec_enabled = tkinter.BooleanVar(self.root, True)
         self.muted = tkinter.BooleanVar(self.root, False)
 
@@ -72,7 +71,7 @@ class View:
         self.device_combobox.grid(column=2, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
         self.device_combobox.bind('<<ComboboxSelected>>', self.on_device_changed)
         tkinter.ttk.Label(top_row, text='Bitrate:').grid(column=3, row=0, padx=(4, 0), pady=(4, 4), sticky=tkinter.NSEW)
-        bitrate_combobox = tkinter.ttk.Combobox(top_row, textvariable=self.bitrate, values=(16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512), width=6)
+        bitrate_combobox = tkinter.ttk.Combobox(top_row, textvariable=self.bitrate, values=('16', '24', '32', '48', '64', '96', '128', '192', '256', '384', '512'), width=6)
         bitrate_combobox.grid(column=4, row=0, pady=(4, 4), sticky=tkinter.NSEW)
         bitrate_combobox.bind('<<ComboboxSelected>>', self.on_bitrate_changed)
         bitrate_combobox.bind('<FocusOut>', self.on_bitrate_changed)
@@ -128,7 +127,7 @@ class View:
         bottom_row.grid(column=0, row=4, columnspan=4, sticky=tkinter.NSEW)
         self.vu_meter = tkinter.Canvas(bottom_row, background='black', height=16, highlightthickness=0)
         self.vu_meter.grid(column=0, row=0, padx=(16, 4), pady=(8, 16), sticky=tkinter.NSEW)
-        self.vu_meter_rects = [
+        self.vu_meter_rects: typing.List[int] = [
             self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#00425c", width=0),
             self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#25421f", width=0),
             self.vu_meter.create_rectangle((0, 0, 0, 7), fill="#443b14", width=0),
@@ -168,7 +167,8 @@ class View:
     def update_vumeter(self) -> None:
         if not self.running:
             return
-        width, height = self.vu_meter.winfo_width(), self.vu_meter.winfo_height()
+        width: int = self.vu_meter.winfo_width()
+        height: int = self.vu_meter.winfo_height()
         width_per_db = width / 70
         y_coords = math.ceil(height / 2 - 1), math.floor(height / 2 + 1)
         self.vu_meter.config(width=width, height=height)
@@ -309,7 +309,7 @@ class View:
             return
         hostapis = self.m.list_sound_hostapis()
         self.hostapi_combobox['values'] = tuple(hostapis)
-        current_hostapi: str = self.hostapi.get()
+        current_hostapi = self.hostapi.get()
         if current_hostapi not in hostapis:
             if len(hostapis) != 0:
                 current_hostapi = hostapis[0]
@@ -319,7 +319,7 @@ class View:
 
         sound_input_devices = self.m.list_sound_input_devices(current_hostapi)
         self.device_combobox['values'] = tuple((i.name for i in sound_input_devices))
-        current_device: str = self.device.get()
+        current_device = self.device.get()
         if current_device not in (i.name for i in sound_input_devices):
             current_device = ''
             for i in sound_input_devices:
@@ -355,7 +355,7 @@ class View:
     def on_device_changed(self, event: tkinter.Event) -> None:
         hostapis = self.m.list_sound_hostapis()
         self.hostapi_combobox['values'] = tuple(hostapis)
-        current_hostapi: str = self.hostapi.get()
+        current_hostapi = self.hostapi.get()
         if current_hostapi not in hostapis:
             if len(hostapis) != 0:
                 current_hostapi = hostapis[0]
@@ -365,7 +365,7 @@ class View:
 
         sound_input_devices = self.m.list_sound_input_devices(current_hostapi)
         self.device_combobox['values'] = tuple((i.name for i in sound_input_devices))
-        current_device: str = self.device.get()
+        current_device = self.device.get()
         if current_device not in (i.name for i in sound_input_devices):
             current_device = ''
             for i in sound_input_devices:
@@ -375,20 +375,20 @@ class View:
         self.m.start_recording(current_hostapi, current_device)
 
     def on_bitrate_changed(self, event: tkinter.Event) -> None:
-        bitrate_str: str = self.bitrate.get()
+        bitrate_str = self.bitrate.get()
         try:
             bitrate = min(512, max(12, int(bitrate_str)))
         except ValueError:
             bitrate = 128
         asyncio.run_coroutine_threadsafe(self.m.set_bitrate(bitrate), self.m.loop)
-        self.bitrate.set(bitrate)
+        self.bitrate.set(str(bitrate))
 
     def on_fec_changed(self) -> None:
-        fec_enabled: bool = self.fec_enabled.get()
+        fec_enabled = self.fec_enabled.get()
         asyncio.run_coroutine_threadsafe(self.m.set_fec_enabled(fec_enabled), self.m.loop)
 
     def on_mute_changed(self) -> None:
-        muted: bool = self.muted.get()
+        muted = self.muted.get()
         self.m.set_muted(muted)
 
     async def run(self) -> None:

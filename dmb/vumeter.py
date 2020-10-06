@@ -17,11 +17,11 @@
 #from __future__ import annotations
 import asyncio
 import array
-import concurrent
+import concurrent.futures
 import typing
 import threading
-import numpy
-import scipy.signal
+import numpy  # type: ignore
+import scipy.signal  # type: ignore
 
 
 class VUMeter:
