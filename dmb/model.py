@@ -349,7 +349,12 @@ class Model:
                 if self.muted:
                     buffer = self.muted_frame
                     consecutive_silence += 1
-                elif buffer.count(0) == len(buffer):
+                # For unknown reason, VoiceMeeter on Windows generates constant
+                # noise in range [-1/32768, +1/32768] even I set the soundcard
+                # to 48kHz 24-bit mode.
+                # Okay, I know 24-bit is too good for human's ear, but it is
+                # your fault to reduce the quality to 15-bit.
+                elif max(buffer) * 65536 < 3 and min(buffer) * 65536 > -3:
                     consecutive_silence += 1
                 else:
                     consecutive_silence = 0
