@@ -20,6 +20,8 @@ cd /path/to/discord-mic-bot
 pip3 install -r requirements.txt --upgrade
 ```
 
+If on Windows and failed to install numpy, you might need to upgrade pip by executing `python3 -m pip install pip --upgrade`.
+
 If on Linux, you also need to install libopus and libportaudio.
 
 ## Obtaining a bot token
