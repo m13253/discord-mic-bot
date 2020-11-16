@@ -127,6 +127,9 @@ class View:
         bottom_row.grid(column=0, row=4, columnspan=4, sticky=tkinter.NSEW)
         self.lu_meter = tkinter.Canvas(bottom_row, background='black', height=16, highlightthickness=0)
         self.lu_meter.grid(column=0, row=0, padx=(16, 4), pady=(8, 16), sticky=tkinter.NSEW)
+        # FIXME: The current design is (totally) not accessible to colorblind people.
+        # Probably we need to draw numbers or grids to solve the problem,
+        # but I do not yet have an idea on how to make a pretty and accessible design.
         self.lu_meter_rects: typing.List[int] = [
             self.lu_meter.create_rectangle((0, 0, 0, 7), fill="#00425c", width=0),
             self.lu_meter.create_rectangle((0, 0, 0, 7), fill="#25421f", width=0),
