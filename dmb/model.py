@@ -28,7 +28,7 @@ import os
 import discord  # type: ignore
 import discord.gateway  # type: ignore
 import sounddevice  # type: ignore
-from . import vumeter
+from . import lumeter
 if typing.TYPE_CHECKING:
     from . import view
 
@@ -47,7 +47,7 @@ class SoundDevice:
 
 
 class Model:
-    __slots__ = ['v', 'loop', 'running', 'logger', 'discord_bot_token', 'discord_client', 'login_status', 'current_viewing_guild', 'input_stream', 'audio_warning_count', 'audio_queue', 'muted', 'opus_encoder', 'opus_encoder_private', 'opus_encoder_executor', 'vu_meter']
+    __slots__ = ['v', 'loop', 'running', 'logger', 'discord_bot_token', 'discord_client', 'login_status', 'current_viewing_guild', 'input_stream', 'audio_warning_count', 'audio_queue', 'muted', 'opus_encoder', 'opus_encoder_private', 'opus_encoder_executor', 'lu_meter']
     muted_frame = array.array('f', [0.0] * (48000 * 20 // 1000 * 2))
 
     def __init__(self, discord_bot_token: str, loop: asyncio.AbstractEventLoop) -> None:
@@ -82,7 +82,7 @@ class Model:
         self.opus_encoder.set_expected_packet_loss_percent(0.15)
         self.opus_encoder_executor = concurrent.futures.ThreadPoolExecutor(1)
 
-        self.vu_meter = vumeter.VUMeter(self.loop)
+        self.lu_meter = lumeter.LUMeter(self.loop)
 
         self._set_up_events()
 
@@ -359,7 +359,7 @@ class Model:
                 else:
                     consecutive_silence = 0
 
-                vu_meter_future = self.vu_meter.push(buffer)
+                lu_meter_future = self.lu_meter.push(buffer)
 
                 if consecutive_silence <= 1:
                     for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
@@ -390,7 +390,7 @@ class Model:
                             # self.loop.call_later(0.01, send_func)
 
                 timestamp_frames = (timestamp_frames + frame_size) & 0xffffffff
-                await vu_meter_future
+                await lu_meter_future
 
         except Exception:
             traceback.print_exc()

@@ -20,7 +20,11 @@ cd /path/to/discord-mic-bot
 pip3 install -r requirements.txt --upgrade
 ```
 
-If on Windows and failed to install numpy, you might need to upgrade pip by executing `python3 -m pip install pip --upgrade`.
+If fail to install
+[PyNaCl](https://github.com/pyca/pynacl/issues/637#issuecomment-710127304) or
+[NumPy](https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html)
+on Windows, you may need to temporarily downgrade to Python 3.8 until those
+problems are fixed.
 
 If on Linux, you also need to install libopus and libportaudio.
 
@@ -87,6 +91,12 @@ For music streaming, it is recommended to aim for -14 LUFS.
 
 But if you are playing the background music while people are speaking, try to
 lower down an extra 20 dB. **(i.e., aim for -34 LUFS.)**
+
+This widget is designed to only give you a rough intuition of your loudness. If
+you want to seriously measure your outgoing signal, try
+[Youlean Loudness Meter (shareware)](https://youlean.co/youlean-loudness-meter/)
+for Windows and macOS or
+[ebumeter](https://wiki.linuxaudio.org/apps/all/ebumeter) for Linux.
 
 ## License
 

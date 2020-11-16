@@ -24,9 +24,10 @@ import numpy  # type: ignore
 import scipy.signal  # type: ignore
 
 
-class VUMeter:
+class LUMeter:
     __slots__ = ['loop', 'buffer', 'zl', 'zr', 'lock', 'executor']
     # ITU-R BS.1770 coefficients at 48kHz sample rate
+    # If you are looking for a set of sample-rate-irrelevant version, check out https://github.com/BrechtDeMan/loudness.py
     coeff_b = numpy.array([1.53512485958697, -5.76194590858032, 8.11691004925258, -5.08848181111208, 1.19839281085285])
     coeff_a = numpy.array([1, -3.68070674801639, 5.08704524797113, -3.13154635144673, 0.72520888847787])
 
