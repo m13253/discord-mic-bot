@@ -382,7 +382,7 @@ class Model:
                 # When there's a break in the sent data, the packet transmission shouldn't simply stop. Instead, send five frames of silence (0xF8, 0xFF, 0xFE) before stopping to avoid unintended Opus interpolation with subsequent transmissions.
                 # -- Discord SDK
                 if consecutive_silence <= 5:
-                    opus_packet = await self.loop.run_in_executor(self.opus_encoder_executor, self._encode_voice, buffer.tobytes())
+                    opus_packet = await self.loop.run_in_executor(self.opus_encoder_executor, self._encode_voice, buffer)
                     for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
                         if voice_client.is_connected():
                             send_func = self._send_audio_packet(voice_client, opus_packet, timestamp_frames)
@@ -425,10 +425,11 @@ class Model:
         setattr(voice_client, '_dmb_last_spoke', timestamp_ns)
         asyncio.ensure_future(voice_client.ws.speak(state), loop=self.loop)
 
-    def _encode_voice(self, buffer: bytes) -> bytes:
-        max_data_bytes = len(buffer)
+    def _encode_voice(self, buffer: 'array.array[float]') -> bytes:
+        c_buffer = ctypes.cast(buffer.buffer_info()[0], ctypes.POINTER(ctypes.c_float))
+        max_data_bytes = len(buffer * 4)
         output = (ctypes.c_char * max_data_bytes)()
-        output_len = self.opus_encoder_private.opus_encode_float(getattr(self.opus_encoder, '_state'), buffer, len(buffer) // 8, output, max_data_bytes)
+        output_len = self.opus_encoder_private.opus_encode_float(getattr(self.opus_encoder, '_state'), c_buffer, len(buffer) // 2, output, max_data_bytes)
         return bytes(output[:output_len])
 
     async def run(self) -> None:
