@@ -9,7 +9,7 @@ experience if you want to sing karaoke or play an instrument in a voice party.
 However, bot can transmit stereo sound to voice channel. Thus, you can connect
 to your party channel as a bot. (You will need an admin to approve.)
 
-Discord developers, listen to these feedbacks! Shame on you!
+Hey Discord developers, listen to these feedbacks! Shame on you!
 - [2018-12-28: Stereo audio](https://support.discord.com/hc/en-us/community/posts/360036186992-Stereo-audio)
 - [2019-07-28: Allow users to have stereo mic output as an option](https://support.discord.com/hc/en-us/community/posts/360048093091-Allow-users-to-have-stereo-mic-output-as-an-option-)
 - [2019-08-25: XLR stereo support](https://support.discord.com/hc/en-us/community/posts/360050181312-XLR-stereo-support)
