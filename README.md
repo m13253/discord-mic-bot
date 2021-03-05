@@ -107,6 +107,9 @@ you want to seriously measure your outgoing signal, try
 for Windows and macOS or
 [ebumeter](https://wiki.linuxaudio.org/apps/all/ebumeter) for Linux.
 
+My [live-loudness-normalizer](https://github.com/m13253/sb-jsfx-plugins) plugin
+can also help you manage your stream loudness in realtime.
+
 ## License
 
 This program is free software: you can redistribute it and/or modify it under
