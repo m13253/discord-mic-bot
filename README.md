@@ -2,6 +2,8 @@
 
 Discord bot to connect to your microphone―and you can have stereo sound
 
+![Screenshot](screenshot.png)
+
 ## Description
 
 Discord transmits only mono sound to voice channel, which makes it a bad
