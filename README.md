@@ -69,7 +69,7 @@ to help you invite your bot.
 
 3. Go to
    ```
-   https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&scope=bot
+   https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3145728&scope=bot
    ```
    (Replace `<CLIENT_ID>` with your Client ID)
 
