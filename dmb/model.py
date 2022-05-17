@@ -69,7 +69,7 @@ class Model:
         self.input_stream: typing.Optional[sounddevice.RawInputStream] = None
         self.audio_warning_count = 0
         # 2048 / 960 == 3, should work even with bad-designed audio systems (e.g. Windows MME)
-        self.audio_queue: asyncio.Queue[typing.Optional['array.array[float]']] = asyncio.Queue(3, loop=self.loop)
+        self.audio_queue: asyncio.Queue[typing.Optional['array.array[float]']] = asyncio.Queue(3)
         self.muted = False
 
         self.opus_encoder = discord.opus.Encoder()
