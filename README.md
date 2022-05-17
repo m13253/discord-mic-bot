@@ -22,7 +22,7 @@ Hey Discord developers, listen to these feedbacks! Shame on you!
 
 ## Installation
 
-First, you need to install Python 3.7 or later version and download
+First, you need to install Python 3.10 or later version and download
 discord-mic-bot.
 
 Then, in terminal or command prompt, type:
