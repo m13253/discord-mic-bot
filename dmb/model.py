@@ -62,8 +62,8 @@ class Model:
         self.logger.addHandler(logging_handler)
 
         self.discord_bot_token = discord_bot_token
-        intents = discord.Intents.guilds.flag | discord.Intents.voice_states.flag
-        self.discord_client = discord.Client(intents=discord.Intents(intents), loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy'))
+        intents = discord.Intents(guilds=True, voice_states=True)
+        self.discord_client = discord.Client(intents=intents, loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy'))
         self.login_status = 'Starting up…'
         self.current_viewing_guild: typing.Optional[discord.Guild] = None
 
