@@ -62,7 +62,8 @@ class Model:
         self.logger.addHandler(logging_handler)
 
         self.discord_bot_token = discord_bot_token
-        self.discord_client = discord.Client(loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy'))
+        intents = discord.Intents.guilds.flag | discord.Intents.voice_states.flag
+        self.discord_client = discord.Client(intents=discord.Intents(intents), loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy'))
         self.login_status = 'Starting up…'
         self.current_viewing_guild: typing.Optional[discord.Guild] = None
 
@@ -440,7 +441,7 @@ class Model:
             self.logger.info(self.login_status)
             if self.v is not None:
                 self.v.loop.call_soon_threadsafe(self.v.login_status_updated)
-            await self.discord_client.login(self.discord_bot_token, bot=True)
+            await self.discord_client.login(self.discord_bot_token)
 
             self.login_status = 'Connecting to Discord server…'
             self.logger.info(self.login_status)
