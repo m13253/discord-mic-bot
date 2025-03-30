@@ -1,4 +1,4 @@
-discord.py[voice]
+discord.py[voice]==2.5.*
 numpy
 scipy
 sounddevice

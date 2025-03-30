@@ -88,6 +88,7 @@ class Model:
         self._set_up_events()
 
     def _set_up_events(self) -> None:
+
         async def on_connect() -> None:
             self.login_status = 'Retreving user info…'
             self.logger.info(self.login_status)
@@ -250,7 +251,7 @@ class Model:
         self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), CTL_RESET_STATE)
 
     async def leave_voice(self, channel: discord.VoiceChannel) -> None:
-        futures = {voice_client.disconnect() for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if voice_client.channel == channel}
+        futures = [voice_client.disconnect() for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if voice_client.channel == channel]
         if futures:
             try:
                 await asyncio.wait(futures)
@@ -309,13 +310,13 @@ class Model:
     def _recording_callback(self, indata: typing.Any, frames: int, time: typing.Any, status: sounddevice.CallbackFlags) -> None:
         if status.input_underflow:
             self.audio_warning_count += 1
-            self.logger.warn('Audio underflow: operating system unable to supply enough audio. (count={})'.format(self.audio_warning_count))
+            self.logger.warning('Audio underflow: operating system unable to supply enough audio. (count={})'.format(self.audio_warning_count))
         if status.input_overflow:
             self.audio_warning_count += 1
-            self.logger.warn('Audio overflow: recording thread not fast enough. (count={})'.format(self.audio_warning_count))
+            self.logger.warning('Audio overflow: recording thread not fast enough. (count={})'.format(self.audio_warning_count))
         if frames != 48000 * 20 // 1000:
             self.audio_warning_count += 1
-            self.logger.warn('Audio frame size mismatch: {} != {}.'.format(frames, 48000 * 20 // 1000), self.audio_warning_count)
+            self.logger.warning('Audio frame size mismatch: {} != {}.'.format(frames, 48000 * 20 // 1000), self.audio_warning_count)
 
         if self.running:
             buffer = array.array('f')
@@ -329,7 +330,7 @@ class Model:
             if not self.running:
                 return
             self.audio_warning_count += 1
-            self.logger.warn('Audio overflow: encoder not fast enough. (count={})'.format(self.audio_warning_count))
+            self.logger.warning('Audio overflow: encoder not fast enough. (count={})'.format(self.audio_warning_count))
 
     async def _encode_voice_loop(self) -> None:
         consecutive_silence = 0
@@ -403,8 +404,6 @@ class Model:
     # The timestamp is supplied from outside so all silent frames get counted.
     def _send_audio_packet(self, voice_client: discord.VoiceClient, opus_packet: bytes, timestamp_frames: int) -> typing.Callable[[], None]:
         sock = voice_client.socket
-        endpoint_ip = voice_client.endpoint_ip
-        endpoint_port: int = voice_client.voice_port  # type: ignore
         sequence = voice_client.sequence
 
         voice_client.timestamp = timestamp_frames
@@ -415,8 +414,8 @@ class Model:
             if sock is None:
                 return
             try:
-                sock.sendto(udp_packet, (endpoint_ip, endpoint_port))
-            except BlockingIOError:
+                getattr(voice_client, '_connection').send_packet(udp_packet)
+            except OSError:
                 self.logger.warning('Network too slow, a packet is dropped. (seq={}, ts={})'.format(sequence, timestamp_frames))
 
         return send
