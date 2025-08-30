@@ -254,7 +254,7 @@ class Model:
         futures = [voice_client.disconnect() for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if voice_client.channel == channel]
         if futures:
             try:
-                await asyncio.wait(futures)
+                await asyncio.gather(*futures, return_exceptions=True)
             except Exception:
                 traceback.print_exc()
 
