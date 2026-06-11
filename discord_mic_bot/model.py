@@ -109,7 +109,7 @@ class Model:
             getattr(self.opus_encoder, '_state'), discord.opus.CTL_SET_BITRATE, 128000
         )
         # FEC only works for voice, not music, and from my experience it hurts music quality severely.
-        self.opus_encoder.set_fec(True)
+        self.opus_encoder.set_fec(False)
         self.opus_encoder.set_expected_packet_loss_percent(0.15)
         self.opus_encoder_executor = concurrent.futures.ThreadPoolExecutor(1)
         self.encode_voice_task: typing.Optional[asyncio.Task[None]] = None
