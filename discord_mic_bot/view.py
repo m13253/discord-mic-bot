@@ -73,7 +73,7 @@ class View:
         self.hostapi = tkinter.StringVar(self.root, '')
         self.device = tkinter.StringVar(self.root, '')
         self.bitrate = tkinter.StringVar(self.root, '128')
-        self.fec_enabled = tkinter.BooleanVar(self.root, True)
+        self.fec_enabled = tkinter.BooleanVar(self.root, False)
         self.muted = tkinter.BooleanVar(self.root, False)
 
         self.root.title('Discord Mic Bot')
@@ -108,7 +108,7 @@ class View:
         tkinter.ttk.Label(top_row, text='Kbps').grid(column=5, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
         # FEC only works for voice, not music, and from my experience it hurts music quality severely.
         tkinter.ttk.Checkbutton(
-            top_row, text='FEC (voice only)', variable=self.fec_enabled, command=self.on_fec_changed
+            top_row, text='FEC (enable for voice, disable for music)', variable=self.fec_enabled, command=self.on_fec_changed
         ).grid(column=6, row=0, padx=(4, 16), pady=(4, 4), sticky=tkinter.NSEW)
 
         top_row.grid_columnconfigure(1, weight=1)
