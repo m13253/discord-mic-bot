@@ -9,7 +9,13 @@ authors = [
     { name = "Star Brilliant" },
 ]
 dependencies = [
-    "discord.py[voice] >= 2.7",
+    # "discord.py[voice] >= 2.7",
+
+    # Importing the [voice] optional feature manually because of a CVE in PyNaCl < 1.6.2
+    "discord.py >= 2.7",
+    "PyNaCl >= 1.6.2",
+    "davey",
+
     "numpy",
     "scipy-stubs[scipy]",
     "sounddevice",
