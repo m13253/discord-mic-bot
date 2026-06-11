@@ -103,6 +103,8 @@ discord-mic-bot.cmd
 
 Both wrapper scripts run the app through uv's managed Python and load `.env` automatically.
 
+Please wait up to 3 minutes on first launch.
+
 ## Monitoring loudness
 
 The loudness meter is compatible to EBU R 128 / ITU-R BS.1770, showing the

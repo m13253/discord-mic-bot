@@ -84,35 +84,53 @@ class View:
             column=0, row=0, columnspan=3, padx=16, pady=(16, 4), sticky=tkinter.NSEW
         )
 
-        top_row = tkinter.ttk.Frame(self.frame)
-        top_row.grid(column=0, row=1, columnspan=4, sticky=tkinter.NSEW)
+        settings_panel = tkinter.ttk.Frame(self.frame)
+        settings_panel.grid(column=0, row=1, columnspan=4, sticky=tkinter.NSEW)
 
-        tkinter.ttk.Label(top_row, text='Device:').grid(column=0, row=0, padx=(16, 0), pady=(4, 4), sticky=tkinter.NSEW)
-        self.hostapi_combobox = tkinter.ttk.Combobox(top_row, textvariable=self.hostapi, width=12, state='readonly')
-        self.hostapi_combobox.grid(column=1, row=0, pady=(4, 4), sticky=tkinter.NSEW)
+        tkinter.ttk.Label(settings_panel, text='Device:').grid(
+            column=0, row=0, padx=(16, 8), pady=(4, 2), sticky=tkinter.NSEW
+        )
+        device_controls = tkinter.ttk.Frame(settings_panel)
+        device_controls.grid(column=1, row=0, padx=(0, 16), pady=(4, 2), sticky=tkinter.NSEW)
+        self.hostapi_combobox = tkinter.ttk.Combobox(
+            device_controls, textvariable=self.hostapi, width=16, state='readonly'
+        )
+        self.hostapi_combobox.grid(column=0, row=0, sticky=tkinter.NSEW)
         self.hostapi_combobox.bind('<<ComboboxSelected>>', self.on_device_changed)
-        self.device_combobox = tkinter.ttk.Combobox(top_row, textvariable=self.device, width=16, state='readonly')
-        self.device_combobox.grid(column=2, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
+        self.device_combobox = tkinter.ttk.Combobox(
+            device_controls, textvariable=self.device, width=32, state='readonly'
+        )
+        self.device_combobox.grid(column=1, row=0, padx=(8, 0), sticky=tkinter.NSEW)
         self.device_combobox.bind('<<ComboboxSelected>>', self.on_device_changed)
-        tkinter.ttk.Label(top_row, text='Bitrate:').grid(column=3, row=0, padx=(4, 0), pady=(4, 4), sticky=tkinter.NSEW)
+        device_controls.grid_columnconfigure(0, weight=1)
+        device_controls.grid_columnconfigure(1, weight=2)
+
+        tkinter.ttk.Label(settings_panel, text='Quality:').grid(
+            column=0, row=1, padx=(16, 8), pady=(2, 4), sticky=tkinter.NSEW
+        )
+        quality_controls = tkinter.ttk.Frame(settings_panel)
+        quality_controls.grid(column=1, row=1, padx=(0, 16), pady=(2, 4), sticky=tkinter.NSEW)
         bitrate_combobox = tkinter.ttk.Combobox(
-            top_row,
+            quality_controls,
             textvariable=self.bitrate,
             values=('16', '24', '32', '48', '64', '96', '128', '192', '256', '384', '512'),
             width=6,
         )
-        bitrate_combobox.grid(column=4, row=0, pady=(4, 4), sticky=tkinter.NSEW)
+        bitrate_combobox.grid(column=0, row=0, sticky=tkinter.W)
         bitrate_combobox.bind('<<ComboboxSelected>>', self.on_bitrate_changed)
         bitrate_combobox.bind('<FocusOut>', self.on_bitrate_changed)
         bitrate_combobox.bind('<Return>', self.on_bitrate_changed)
-        tkinter.ttk.Label(top_row, text='Kbps').grid(column=5, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
+        tkinter.ttk.Label(quality_controls, text='Kbps').grid(column=1, row=0, padx=(4, 8), sticky=tkinter.NSEW)
         # FEC only works for voice, not music, and from my experience it hurts music quality severely.
         tkinter.ttk.Checkbutton(
-            top_row, text='FEC (enable for voice, disable for music)', variable=self.fec_enabled, command=self.on_fec_changed
-        ).grid(column=6, row=0, padx=(4, 16), pady=(4, 4), sticky=tkinter.NSEW)
+            quality_controls,
+            text='Forward Error Correction (enable for voice, disable for music)',
+            variable=self.fec_enabled,
+            command=self.on_fec_changed,
+        ).grid(column=2, row=0, padx=(8, 0), sticky=tkinter.W)
+        quality_controls.grid_columnconfigure(3, weight=1)
 
-        top_row.grid_columnconfigure(1, weight=1)
-        top_row.grid_columnconfigure(2, weight=2)
+        settings_panel.grid_columnconfigure(1, weight=1)
 
         tkinter.ttk.Label(self.frame, text='Guilds:').grid(
             column=0, row=2, padx=(16, 8), pady=(4, 0), sticky=tkinter.NSEW
