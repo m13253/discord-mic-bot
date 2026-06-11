@@ -66,8 +66,6 @@ You need to obtain a bot token to log into Discord's server.
    DISCORD_BOT_TOKEN=your-token-here
    ```
 
-   `.env` is ignored by Git; never commit real bot tokens.
-
 ## Inviting the bot to a Discord server
 
 Note: You need to have the permission to invite a bot to the destination server.
