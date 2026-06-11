@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-discord-mic-bot = "dmb:main"
+discord-mic-bot = "discord_mic_bot:main"
 
 [dependency-groups]
 dev = [
@@ -25,11 +25,11 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-include = ["dmb*"]
+[tool.hatch.build.targets.wheel]
+include = ["discord_mic_bot"]
 
 [tool.ruff]
 line-length = 120
