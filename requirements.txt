@@ -1,4 +1,0 @@
-discord.py[voice]>=2.7
-numpy
-scipy
-sounddevice

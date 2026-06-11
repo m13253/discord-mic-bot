@@ -22,12 +22,35 @@ import tkinter.ttk
 import typing
 
 import discord  # type: ignore
+
 if typing.TYPE_CHECKING:
     from . import model
 
 
 class View:
-    __slots__ = ['m', 'loop', 'running', 'root', 'login_status', 'guilds', 'channels', 'joined', 'hostapi', 'device', 'bitrate', 'fec_enabled', 'muted', 'frame', 'hostapi_combobox', 'device_combobox', 'guilds_list', 'channels_list', 'joined_list', 'lu_meter', 'lu_meter_rects']
+    __slots__ = [
+        'm',
+        'loop',
+        'running',
+        'root',
+        'login_status',
+        'guilds',
+        'channels',
+        'joined',
+        'hostapi',
+        'device',
+        'bitrate',
+        'fec_enabled',
+        'muted',
+        'frame',
+        'hostapi_combobox',
+        'device_combobox',
+        'guilds_list',
+        'channels_list',
+        'joined_list',
+        'lu_meter',
+        'lu_meter_rects',
+    ]
 
     def __init__(self, m: 'model.Model', loop: asyncio.AbstractEventLoop) -> None:
         self.m = m
@@ -58,7 +81,9 @@ class View:
         self.frame = tkinter.ttk.Frame(self.root)
         self.frame.grid(column=0, row=0, sticky=tkinter.NSEW)
 
-        tkinter.ttk.Label(self.frame, textvariable=self.login_status).grid(column=0, row=0, columnspan=3, padx=16, pady=(16, 4), sticky=tkinter.NSEW)
+        tkinter.ttk.Label(self.frame, textvariable=self.login_status).grid(
+            column=0, row=0, columnspan=3, padx=16, pady=(16, 4), sticky=tkinter.NSEW
+        )
 
         top_row = tkinter.ttk.Frame(self.frame)
         top_row.grid(column=0, row=1, columnspan=4, sticky=tkinter.NSEW)
@@ -71,28 +96,43 @@ class View:
         self.device_combobox.grid(column=2, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
         self.device_combobox.bind('<<ComboboxSelected>>', self.on_device_changed)
         tkinter.ttk.Label(top_row, text='Bitrate:').grid(column=3, row=0, padx=(4, 0), pady=(4, 4), sticky=tkinter.NSEW)
-        bitrate_combobox = tkinter.ttk.Combobox(top_row, textvariable=self.bitrate, values=('16', '24', '32', '48', '64', '96', '128', '192', '256', '384', '512'), width=6)
+        bitrate_combobox = tkinter.ttk.Combobox(
+            top_row,
+            textvariable=self.bitrate,
+            values=('16', '24', '32', '48', '64', '96', '128', '192', '256', '384', '512'),
+            width=6,
+        )
         bitrate_combobox.grid(column=4, row=0, pady=(4, 4), sticky=tkinter.NSEW)
         bitrate_combobox.bind('<<ComboboxSelected>>', self.on_bitrate_changed)
         bitrate_combobox.bind('<FocusOut>', self.on_bitrate_changed)
         bitrate_combobox.bind('<Return>', self.on_bitrate_changed)
         tkinter.ttk.Label(top_row, text='Kbps').grid(column=5, row=0, padx=(0, 4), pady=(4, 4), sticky=tkinter.NSEW)
         # FEC only works for voice, not music, and from my experience it hurts music quality severely.
-        tkinter.ttk.Checkbutton(top_row, text='FEC (voice only)', variable=self.fec_enabled, command=self.on_fec_changed).grid(column=6, row=0, padx=(4, 16), pady=(4, 4), sticky=tkinter.NSEW)
+        tkinter.ttk.Checkbutton(
+            top_row, text='FEC (voice only)', variable=self.fec_enabled, command=self.on_fec_changed
+        ).grid(column=6, row=0, padx=(4, 16), pady=(4, 4), sticky=tkinter.NSEW)
 
         top_row.grid_columnconfigure(1, weight=1)
         top_row.grid_columnconfigure(2, weight=2)
 
-        tkinter.ttk.Label(self.frame, text='Guilds:').grid(column=0, row=2, padx=(16, 8), pady=(4, 0), sticky=tkinter.NSEW)
-        tkinter.ttk.Label(self.frame, text='Channels:').grid(column=1, row=2, padx=(8, 0), pady=(4, 0), sticky=tkinter.NSEW)
-        tkinter.ttk.Label(self.frame, text='Joined:').grid(column=3, row=2, padx=(0, 16), pady=(4, 0), sticky=tkinter.NSEW)
+        tkinter.ttk.Label(self.frame, text='Guilds:').grid(
+            column=0, row=2, padx=(16, 8), pady=(4, 0), sticky=tkinter.NSEW
+        )
+        tkinter.ttk.Label(self.frame, text='Channels:').grid(
+            column=1, row=2, padx=(8, 0), pady=(4, 0), sticky=tkinter.NSEW
+        )
+        tkinter.ttk.Label(self.frame, text='Joined:').grid(
+            column=3, row=2, padx=(0, 16), pady=(4, 0), sticky=tkinter.NSEW
+        )
 
         guilds_list_panel = tkinter.ttk.Frame(self.frame)
         guilds_list_panel.grid(column=0, row=3, padx=(16, 8), pady=(0, 4), sticky=tkinter.NSEW)
         self.guilds_list = tkinter.Listbox(guilds_list_panel, height=16)
         self.guilds_list.grid(column=0, row=0, sticky=tkinter.NSEW)
         self.guilds_list.bind('<<ListboxSelect>>', self.on_guild_changed)
-        guilds_list_scroll = tkinter.ttk.Scrollbar(guilds_list_panel, orient=tkinter.VERTICAL, command=self.guilds_list.yview)
+        guilds_list_scroll = tkinter.ttk.Scrollbar(
+            guilds_list_panel, orient=tkinter.VERTICAL, command=self.guilds_list.yview
+        )
         guilds_list_scroll.grid(column=1, row=0, sticky=tkinter.NSEW)
         self.guilds_list['yscrollcommand'] = guilds_list_scroll.set
         guilds_list_panel.grid_rowconfigure(0, weight=1)
@@ -102,7 +142,9 @@ class View:
         channels_list_panel.grid(column=1, row=3, padx=(8, 0), pady=(0, 4), sticky=tkinter.NSEW)
         self.channels_list = tkinter.Listbox(channels_list_panel, height=16)
         self.channels_list.grid(column=0, row=0, sticky=tkinter.NSEW)
-        channels_list_scroll = tkinter.ttk.Scrollbar(channels_list_panel, orient=tkinter.VERTICAL, command=self.channels_list.yview)
+        channels_list_scroll = tkinter.ttk.Scrollbar(
+            channels_list_panel, orient=tkinter.VERTICAL, command=self.channels_list.yview
+        )
         channels_list_scroll.grid(column=1, row=0, sticky=tkinter.NSEW)
         self.channels_list['yscrollcommand'] = channels_list_scroll.set
         channels_list_panel.grid_rowconfigure(0, weight=1)
@@ -112,7 +154,9 @@ class View:
         joined_list_panel.grid(column=3, row=3, padx=(0, 16), pady=(0, 4), sticky=tkinter.NSEW)
         self.joined_list = tkinter.Listbox(joined_list_panel, height=16)
         self.joined_list.grid(column=0, row=0, sticky=tkinter.NSEW)
-        joined_list_scroll = tkinter.ttk.Scrollbar(joined_list_panel, orient=tkinter.VERTICAL, command=self.joined_list.yview)
+        joined_list_scroll = tkinter.ttk.Scrollbar(
+            joined_list_panel, orient=tkinter.VERTICAL, command=self.joined_list.yview
+        )
         joined_list_scroll.grid(column=1, row=0, sticky=tkinter.NSEW)
         self.joined_list['yscrollcommand'] = joined_list_scroll.set
         joined_list_panel.grid_rowconfigure(0, weight=1)
@@ -120,8 +164,12 @@ class View:
 
         add_remove_buttons = tkinter.ttk.Frame(self.frame)
         add_remove_buttons.grid(column=2, row=3, pady=(0, 4))
-        tkinter.ttk.Button(add_remove_buttons, text='→', width=2, command=self.on_add_button_pressed).grid(column=0, row=0, pady=4, sticky=tkinter.S)
-        tkinter.ttk.Button(add_remove_buttons, text='←', width=2, command=self.on_remove_button_pressed).grid(column=0, row=1, pady=4, sticky=tkinter.N)
+        tkinter.ttk.Button(add_remove_buttons, text='→', width=2, command=self.on_add_button_pressed).grid(
+            column=0, row=0, pady=4, sticky=tkinter.S
+        )
+        tkinter.ttk.Button(add_remove_buttons, text='←', width=2, command=self.on_remove_button_pressed).grid(
+            column=0, row=1, pady=4, sticky=tkinter.N
+        )
 
         bottom_row = tkinter.ttk.Frame(self.frame)
         bottom_row.grid(column=0, row=4, columnspan=4, sticky=tkinter.NSEW)
@@ -148,7 +196,9 @@ class View:
             self.lu_meter.create_rectangle((0, 9, 0, 16), fill="#b2a165", width=0, state=tkinter.HIDDEN),
             self.lu_meter.create_rectangle((0, 9, 0, 16), fill="#d98e86", width=0, state=tkinter.HIDDEN),
         ]
-        tkinter.ttk.Checkbutton(bottom_row, text='Mute', variable=self.muted, command=self.on_mute_changed).grid(column=2, row=0, padx=(4, 16), pady=(8, 16), sticky=tkinter.NSEW)
+        tkinter.ttk.Checkbutton(bottom_row, text='Mute', variable=self.muted, command=self.on_mute_changed).grid(
+            column=2, row=0, padx=(4, 16), pady=(8, 16), sticky=tkinter.NSEW
+        )
         bottom_row.grid_columnconfigure(0, weight=1)
 
         self.frame.grid_rowconfigure(3, weight=1)
@@ -180,13 +230,25 @@ class View:
         loudness = lufs[0] + 73.010299956639812, lufs[1] + 73.010299956639812  # 70 + 10*log10(2)
 
         self.lu_meter.coords(self.lu_meter_rects[0], self._round_bounding_box(0, 0, 38 * width_per_db, y_coords[0]))
-        self.lu_meter.coords(self.lu_meter_rects[1], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
-        self.lu_meter.coords(self.lu_meter_rects[2], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0]))
+        self.lu_meter.coords(
+            self.lu_meter_rects[1], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0])
+        )
+        self.lu_meter.coords(
+            self.lu_meter_rects[2], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0])
+        )
         self.lu_meter.coords(self.lu_meter_rects[3], self._round_bounding_box(65 * width_per_db, 0, width, y_coords[0]))
-        self.lu_meter.coords(self.lu_meter_rects[4], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
-        self.lu_meter.coords(self.lu_meter_rects[5], self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height))
-        self.lu_meter.coords(self.lu_meter_rects[6], self._round_bounding_box(56 * width_per_db, y_coords[1], 65 * width_per_db, height))
-        self.lu_meter.coords(self.lu_meter_rects[7], self._round_bounding_box(65 * width_per_db, y_coords[1], width, height))
+        self.lu_meter.coords(
+            self.lu_meter_rects[4], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height)
+        )
+        self.lu_meter.coords(
+            self.lu_meter_rects[5], self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height)
+        )
+        self.lu_meter.coords(
+            self.lu_meter_rects[6], self._round_bounding_box(56 * width_per_db, y_coords[1], 65 * width_per_db, height)
+        )
+        self.lu_meter.coords(
+            self.lu_meter_rects[7], self._round_bounding_box(65 * width_per_db, y_coords[1], width, height)
+        )
 
         if loudness[0] <= 0:
             self.lu_meter.itemconfig(self.lu_meter_rects[8], state=tkinter.HIDDEN)
@@ -194,40 +256,65 @@ class View:
             self.lu_meter.itemconfig(self.lu_meter_rects[10], state=tkinter.HIDDEN)
             self.lu_meter.itemconfig(self.lu_meter_rects[11], state=tkinter.HIDDEN)
         elif loudness[0] <= 38:
-            self.lu_meter.coords(self.lu_meter_rects[8], self._round_bounding_box(0, 0, loudness[0] * width_per_db, y_coords[0]))
+            self.lu_meter.coords(
+                self.lu_meter_rects[8], self._round_bounding_box(0, 0, loudness[0] * width_per_db, y_coords[0])
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[8], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[9], state=tkinter.HIDDEN)
             self.lu_meter.itemconfig(self.lu_meter_rects[10], state=tkinter.HIDDEN)
             self.lu_meter.itemconfig(self.lu_meter_rects[11], state=tkinter.HIDDEN)
         elif loudness[0] <= 56:
-            self.lu_meter.coords(self.lu_meter_rects[8], self._round_bounding_box(0, 0, loudness[0] * width_per_db, y_coords[0]))
-            self.lu_meter.coords(self.lu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]))
+            self.lu_meter.coords(
+                self.lu_meter_rects[8], self._round_bounding_box(0, 0, loudness[0] * width_per_db, y_coords[0])
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[9],
+                self._round_bounding_box(38 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]),
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[8], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[9], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[10], state=tkinter.HIDDEN)
             self.lu_meter.itemconfig(self.lu_meter_rects[11], state=tkinter.HIDDEN)
         elif loudness[0] <= 65:
             self.lu_meter.coords(self.lu_meter_rects[8], self._round_bounding_box(0, 0, 38 * width_per_db, y_coords[0]))
-            self.lu_meter.coords(self.lu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
-            self.lu_meter.coords(self.lu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]))
+            self.lu_meter.coords(
+                self.lu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0])
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[10],
+                self._round_bounding_box(56 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]),
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[8], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[9], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[10], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[11], state=tkinter.HIDDEN)
         elif loudness[0] <= 70:
             self.lu_meter.coords(self.lu_meter_rects[8], self._round_bounding_box(0, 0, 38 * width_per_db, y_coords[0]))
-            self.lu_meter.coords(self.lu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
-            self.lu_meter.coords(self.lu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0]))
-            self.lu_meter.coords(self.lu_meter_rects[11], self._round_bounding_box(65 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]))
+            self.lu_meter.coords(
+                self.lu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0])
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0])
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[11],
+                self._round_bounding_box(65 * width_per_db, 0, loudness[0] * width_per_db, y_coords[0]),
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[8], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[9], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[10], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[11], state=tkinter.NORMAL)
         else:
             self.lu_meter.coords(self.lu_meter_rects[8], self._round_bounding_box(0, 0, 38 * width_per_db, y_coords[0]))
-            self.lu_meter.coords(self.lu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0]))
-            self.lu_meter.coords(self.lu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0]))
-            self.lu_meter.coords(self.lu_meter_rects[11], self._round_bounding_box(65 * width_per_db, 0, width, y_coords[0]))
+            self.lu_meter.coords(
+                self.lu_meter_rects[9], self._round_bounding_box(38 * width_per_db, 0, 56 * width_per_db, y_coords[0])
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[10], self._round_bounding_box(56 * width_per_db, 0, 65 * width_per_db, y_coords[0])
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[11], self._round_bounding_box(65 * width_per_db, 0, width, y_coords[0])
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[8], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[9], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[10], state=tkinter.NORMAL)
@@ -239,40 +326,76 @@ class View:
             self.lu_meter.itemconfig(self.lu_meter_rects[14], state=tkinter.HIDDEN)
             self.lu_meter.itemconfig(self.lu_meter_rects[15], state=tkinter.HIDDEN)
         elif loudness[1] <= 38:
-            self.lu_meter.coords(self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], loudness[1] * width_per_db, height))
+            self.lu_meter.coords(
+                self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], loudness[1] * width_per_db, height)
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[12], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[13], state=tkinter.HIDDEN)
             self.lu_meter.itemconfig(self.lu_meter_rects[14], state=tkinter.HIDDEN)
             self.lu_meter.itemconfig(self.lu_meter_rects[15], state=tkinter.HIDDEN)
         elif loudness[1] <= 56:
-            self.lu_meter.coords(self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
-            self.lu_meter.coords(self.lu_meter_rects[13], self._round_bounding_box(38 * width_per_db, y_coords[1], loudness[1] * width_per_db, height))
+            self.lu_meter.coords(
+                self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height)
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[13],
+                self._round_bounding_box(38 * width_per_db, y_coords[1], loudness[1] * width_per_db, height),
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[12], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[13], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[14], state=tkinter.HIDDEN)
             self.lu_meter.itemconfig(self.lu_meter_rects[15], state=tkinter.HIDDEN)
         elif loudness[1] <= 65:
-            self.lu_meter.coords(self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
-            self.lu_meter.coords(self.lu_meter_rects[13], self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height))
-            self.lu_meter.coords(self.lu_meter_rects[14], self._round_bounding_box(56 * width_per_db, y_coords[1], loudness[1] * width_per_db, height))
+            self.lu_meter.coords(
+                self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height)
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[13],
+                self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height),
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[14],
+                self._round_bounding_box(56 * width_per_db, y_coords[1], loudness[1] * width_per_db, height),
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[12], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[13], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[14], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[15], state=tkinter.HIDDEN)
         elif loudness[1] <= 70:
-            self.lu_meter.coords(self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
-            self.lu_meter.coords(self.lu_meter_rects[13], self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height))
-            self.lu_meter.coords(self.lu_meter_rects[14], self._round_bounding_box(56 * width_per_db, y_coords[1], 65 * width_per_db, height))
-            self.lu_meter.coords(self.lu_meter_rects[15], self._round_bounding_box(65 * width_per_db, y_coords[1], loudness[1] * width_per_db, height))
+            self.lu_meter.coords(
+                self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height)
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[13],
+                self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height),
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[14],
+                self._round_bounding_box(56 * width_per_db, y_coords[1], 65 * width_per_db, height),
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[15],
+                self._round_bounding_box(65 * width_per_db, y_coords[1], loudness[1] * width_per_db, height),
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[12], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[13], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[14], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[15], state=tkinter.NORMAL)
         else:
-            self.lu_meter.coords(self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height))
-            self.lu_meter.coords(self.lu_meter_rects[13], self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height))
-            self.lu_meter.coords(self.lu_meter_rects[14], self._round_bounding_box(56 * width_per_db, y_coords[1], 65 * width_per_db, height))
-            self.lu_meter.coords(self.lu_meter_rects[15], self._round_bounding_box(65 * width_per_db, y_coords[1], width, height))
+            self.lu_meter.coords(
+                self.lu_meter_rects[12], self._round_bounding_box(0, y_coords[1], 38 * width_per_db, height)
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[13],
+                self._round_bounding_box(38 * width_per_db, y_coords[1], 56 * width_per_db, height),
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[14],
+                self._round_bounding_box(56 * width_per_db, y_coords[1], 65 * width_per_db, height),
+            )
+            self.lu_meter.coords(
+                self.lu_meter_rects[15], self._round_bounding_box(65 * width_per_db, y_coords[1], width, height)
+            )
             self.lu_meter.itemconfig(self.lu_meter_rects[12], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[13], state=tkinter.NORMAL)
             self.lu_meter.itemconfig(self.lu_meter_rects[14], state=tkinter.NORMAL)

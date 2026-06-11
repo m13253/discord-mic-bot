@@ -1,3 +1,3 @@
 @echo off
 
-python -m dmb %* || pause
+uv run --managed-python --env-file .env discord-mic-bot %* || pause

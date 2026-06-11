@@ -14,12 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#from __future__ import annotations
-import asyncio
+# from __future__ import annotations
 import array
+import asyncio
 import concurrent.futures
-import typing
 import threading
+import typing
+
 import numpy  # type: ignore
 import scipy.signal  # type: ignore
 

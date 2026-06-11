@@ -22,22 +22,23 @@ Hey Discord developers, listen to these feedbacks! Shame on you!
 
 ## Installation
 
-First, you need to install Python 3.10 or later version and download
-discord-mic-bot.
+First, install [uv](https://docs.astral.sh/uv/) and download discord-mic-bot.
 
-Then, in terminal or command prompt, type:
+Install the native audio libraries:
+
+- macOS with Homebrew:
+  ```sh
+  brew install opus portaudio
+  ```
+- Linux: install libopus and libportaudio with your distribution's package manager.
+
+Then set up the uv-managed Python environment:
+
 ```sh
 cd /path/to/discord-mic-bot
-pip3 install -r requirements.txt --upgrade
+uv python install 3.12
+uv sync --managed-python --python 3.12
 ```
-
-If fail to install
-[PyNaCl](https://github.com/pyca/pynacl/issues/637#issuecomment-710127304) or
-[NumPy](https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html)
-on Windows, you may need to temporarily downgrade to Python 3.8 until those
-problems are fixed.
-
-If on Linux, you also need to install libopus and libportaudio.
 
 ## Obtaining a bot token
 
@@ -53,7 +54,19 @@ You need to obtain a bot token to log into Discord's server.
 
 4. Click on "Copy Token".
 
-5. Open the file named `token.txt` and paste your token inside that file.
+5. Copy `.env.example` to `.env` and paste your token there:
+
+   ```sh
+   cp .env.example .env
+   ```
+
+   Edit `.env` so it contains:
+
+   ```dotenv
+   DISCORD_BOT_TOKEN=your-token-here
+   ```
+
+   `.env` is ignored by Git; never commit real bot tokens.
 
 ## Inviting the bot to a Discord server
 
@@ -78,9 +91,19 @@ to help you invite your bot.
 
 ## Usage
 
-For Linux or macOS users, `discord-mic-bot` is the entry point.
+For Linux or macOS users, run:
 
-For Windows users, `discord-mic-bot.cmd` is the entry point.
+```sh
+./discord-mic-bot
+```
+
+For Windows users, run:
+
+```cmd
+discord-mic-bot.cmd
+```
+
+Both wrapper scripts run the app through uv's managed Python and load `.env` automatically.
 
 ## Monitoring loudness
 

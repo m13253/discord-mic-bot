@@ -19,16 +19,20 @@ import asyncio
 import asyncio.queues
 import concurrent.futures
 import ctypes
+import ctypes.util
 import logging
+import os
+import platform
 import time
 import traceback
 import typing
-import os
 
 import discord  # type: ignore
 import discord.gateway  # type: ignore
 import sounddevice  # type: ignore
+
 from . import lumeter
+
 if typing.TYPE_CHECKING:
     from . import view
 
@@ -47,7 +51,24 @@ class SoundDevice:
 
 
 class Model:
-    __slots__ = ['v', 'loop', 'running', 'logger', 'discord_bot_token', 'discord_client', 'login_status', 'current_viewing_guild', 'input_stream', 'audio_warning_count', 'audio_queue', 'muted', 'opus_encoder', 'opus_encoder_private', 'opus_encoder_executor', 'lu_meter']
+    __slots__ = [
+        'v',
+        'loop',
+        'running',
+        'logger',
+        'discord_bot_token',
+        'discord_client',
+        'login_status',
+        'current_viewing_guild',
+        'input_stream',
+        'audio_warning_count',
+        'audio_queue',
+        'muted',
+        'opus_encoder',
+        'opus_encoder_private',
+        'opus_encoder_executor',
+        'lu_meter',
+    ]
     muted_frame = array.array('f', [0.0] * (48000 * 20 // 1000 * 2))
 
     def __init__(self, discord_bot_token: str, loop: asyncio.AbstractEventLoop) -> None:
@@ -63,7 +84,9 @@ class Model:
 
         self.discord_bot_token = discord_bot_token
         intents = discord.Intents(guilds=True, voice_states=True)
-        self.discord_client = discord.Client(intents=intents, loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy'))
+        self.discord_client = discord.Client(
+            intents=intents, loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy')
+        )
         self.login_status = 'Starting up…'
         self.current_viewing_guild: typing.Optional[discord.Guild] = None
 
@@ -73,11 +96,14 @@ class Model:
         self.audio_queue: asyncio.Queue[typing.Optional['array.array[float]']] = asyncio.Queue(3)
         self.muted = False
 
+        self._load_opus()
         self.opus_encoder = discord.opus.Encoder()
         # Use the private function just to satisfy my paranoid of 1 Kbps == 1000 bps.
         # getattr is used to bypass the linter
         self.opus_encoder_private = getattr(discord.opus, '_lib')
-        self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), discord.opus.CTL_SET_BITRATE, 128000)
+        self.opus_encoder_private.opus_encoder_ctl(
+            getattr(self.opus_encoder, '_state'), discord.opus.CTL_SET_BITRATE, 128000
+        )
         # FEC only works for voice, not music, and from my experience it hurts music quality severely.
         self.opus_encoder.set_fec(True)
         self.opus_encoder.set_expected_packet_loss_percent(0.15)
@@ -86,6 +112,45 @@ class Model:
         self.lu_meter = lumeter.LUMeter(self.loop)
 
         self._set_up_events()
+
+    @staticmethod
+    def _opus_library_candidates() -> typing.Iterator[str]:
+        discovered = ctypes.util.find_library('opus')
+        if discovered:
+            yield discovered
+
+        if platform.system() == 'Darwin':
+            homebrew_prefixes = ('/opt/homebrew', '/usr/local')
+            library_names = ('libopus.dylib', 'libopus.0.dylib')
+            for prefix in homebrew_prefixes:
+                for library_name in library_names:
+                    yield os.path.join(prefix, 'opt', 'opus', 'lib', library_name)
+        elif platform.system() == 'Linux':
+            yield 'libopus.so.0'
+            yield 'libopus.so'
+        elif platform.system() == 'Windows':
+            yield 'opus'
+            yield 'libopus-0'
+
+    @classmethod
+    def _load_opus(cls) -> None:
+        if discord.opus.is_loaded():
+            return
+
+        load_errors: typing.List[str] = []
+        for library in cls._opus_library_candidates():
+            try:
+                discord.opus.load_opus(library)
+            except OSError as exc:
+                load_errors.append(f'{library}: {exc}')
+            else:
+                if discord.opus.is_loaded():
+                    return
+
+        message = 'Unable to load libopus. Please install Opus and make sure it is discoverable by Python.'
+        if load_errors:
+            message += '\nTried:\n' + '\n'.join(f'- {error}' for error in load_errors)
+        raise RuntimeError(message)
 
     def _set_up_events(self) -> None:
 
@@ -184,7 +249,9 @@ class Model:
 
         self.discord_client.event(on_guild_update)
 
-        async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+        async def on_voice_state_update(
+            member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
+        ) -> None:
             if self.v is not None:
                 self.v.loop.call_soon_threadsafe(self.v.joined_updated)
 
@@ -208,7 +275,11 @@ class Model:
         return self.current_viewing_guild.voice_channels
 
     def list_joined(self) -> typing.List[discord.VoiceChannel]:
-        return [i.channel for i in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if isinstance(i.channel, discord.VoiceChannel)]
+        return [
+            i.channel
+            for i in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients)
+            if isinstance(i.channel, discord.VoiceChannel)
+        ]
 
     def list_sound_hostapis(self) -> typing.List[str]:
         hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any], ...], sounddevice.query_hostapis())
@@ -218,7 +289,9 @@ class Model:
         hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any], ...], sounddevice.query_hostapis())
         devices = typing.cast(sounddevice.DeviceList, sounddevice.query_devices())
 
-        default_input_id, _ = typing.cast(typing.Tuple[typing.Optional[int], typing.Optional[int]], sounddevice.default.device)
+        default_input_id, _ = typing.cast(
+            typing.Tuple[typing.Optional[int], typing.Optional[int]], sounddevice.default.device
+        )
         for api in hostapis:
             if api['name'] == hostapi:
                 default_input_id = api['default_input_device']
@@ -226,7 +299,13 @@ class Model:
         else:
             return []
 
-        return [SoundDevice(typing.cast(str, dev['name']), idx == default_input_id) for idx, dev in enumerate(typing.cast(typing.Iterable[typing.Dict[str, typing.Any]], devices)) if dev['max_input_channels'] > 0 and dev['hostapi'] < len(hostapis) and hostapis[typing.cast(int, dev['hostapi'])]['name'] == hostapi]
+        return [
+            SoundDevice(typing.cast(str, dev['name']), idx == default_input_id)
+            for idx, dev in enumerate(typing.cast(typing.Iterable[typing.Dict[str, typing.Any]], devices))
+            if dev['max_input_channels'] > 0
+            and dev['hostapi'] < len(hostapis)
+            and hostapis[typing.cast(int, dev['hostapi'])]['name'] == hostapi
+        ]
 
     def view_guild(self, guild: typing.Optional[discord.Guild]) -> None:
         self.current_viewing_guild = guild
@@ -251,7 +330,11 @@ class Model:
         self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), CTL_RESET_STATE)
 
     async def leave_voice(self, channel: discord.VoiceChannel) -> None:
-        futures = [voice_client.disconnect() for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients) if voice_client.channel == channel]
+        futures = [
+            voice_client.disconnect()
+            for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients)
+            if voice_client.channel == channel
+        ]
         if futures:
             try:
                 await asyncio.gather(*futures, return_exceptions=True)
@@ -272,13 +355,29 @@ class Model:
 
         device_id: int
         for idx, dev in enumerate(typing.cast(typing.Iterable[typing.Dict[str, typing.Any]], devices)):
-            if dev['name'] == device and dev['max_input_channels'] > 0 and dev['hostapi'] < len(hostapis) and hostapis[typing.cast(int, dev['hostapi'])]['name'] == hostapi:
+            if (
+                dev['name'] == device
+                and dev['max_input_channels'] > 0
+                and dev['hostapi'] < len(hostapis)
+                and hostapis[typing.cast(int, dev['hostapi'])]['name'] == hostapi
+            ):
                 device_id = idx
                 break
         else:
             return
 
-        self.input_stream = sounddevice.RawInputStream(samplerate=48000, blocksize=48000 * 20 // 1000, device=device_id, channels=2, dtype='float32', latency='low', callback=self._recording_callback, clip_off=True, dither_off=True, never_drop_input=False)
+        self.input_stream = sounddevice.RawInputStream(
+            samplerate=48000,
+            blocksize=48000 * 20 // 1000,
+            device=device_id,
+            channels=2,
+            dtype='float32',
+            latency='low',
+            callback=self._recording_callback,
+            clip_off=True,
+            dither_off=True,
+            never_drop_input=False,
+        )
         try:
             self.input_stream.start()
         except Exception:
@@ -291,7 +390,9 @@ class Model:
 
     def _set_bitrate(self, kbps: int) -> None:
         kbps = min(512, max(12, kbps))
-        self.opus_encoder_private.opus_encoder_ctl(getattr(self.opus_encoder, '_state'), discord.opus.CTL_SET_BITRATE, kbps * 1000)
+        self.opus_encoder_private.opus_encoder_ctl(
+            getattr(self.opus_encoder, '_state'), discord.opus.CTL_SET_BITRATE, kbps * 1000
+        )
 
     async def set_fec_enabled(self, enabled: bool) -> None:
         await self.loop.run_in_executor(self.opus_encoder_executor, self._set_fec_enabled, enabled)
@@ -307,20 +408,30 @@ class Model:
     def set_muted(self, muted: bool) -> None:
         self.muted = muted
 
-    def _recording_callback(self, indata: typing.Any, frames: int, time: typing.Any, status: sounddevice.CallbackFlags) -> None:
+    def _recording_callback(
+        self, indata: typing.Any, frames: int, time: typing.Any, status: sounddevice.CallbackFlags
+    ) -> None:
         if status.input_underflow:
             self.audio_warning_count += 1
-            self.logger.warning('Audio underflow: operating system unable to supply enough audio. (count={})'.format(self.audio_warning_count))
+            self.logger.warning(
+                'Audio underflow: operating system unable to supply enough audio. (count={})'.format(
+                    self.audio_warning_count
+                )
+            )
         if status.input_overflow:
             self.audio_warning_count += 1
-            self.logger.warning('Audio overflow: recording thread not fast enough. (count={})'.format(self.audio_warning_count))
+            self.logger.warning(
+                'Audio overflow: recording thread not fast enough. (count={})'.format(self.audio_warning_count)
+            )
         if frames != 48000 * 20 // 1000:
             self.audio_warning_count += 1
-            self.logger.warning('Audio frame size mismatch: {} != {}.'.format(frames, 48000 * 20 // 1000), self.audio_warning_count)
+            self.logger.warning(
+                'Audio frame size mismatch: {} != {}.'.format(frames, 48000 * 20 // 1000), self.audio_warning_count
+            )
 
         if self.running:
             buffer = array.array('f')
-            buffer.frombytes(bytes(indata)[:frames * 8])
+            buffer.frombytes(bytes(indata)[: frames * 8])
             asyncio.run_coroutine_threadsafe(self._recording_callback_main_thread(buffer), self.loop).result()
 
     async def _recording_callback_main_thread(self, buffer: 'array.array[float]') -> None:
@@ -364,34 +475,48 @@ class Model:
                 lu_meter_future = self.lu_meter.push(buffer)
 
                 if consecutive_silence <= 1:
-                    for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
+                    for voice_client in typing.cast(
+                        typing.List[discord.VoiceClient], self.discord_client.voice_clients
+                    ):
                         if voice_client.is_connected():
                             voice_client_name: str = typing.cast(discord.VoiceChannel, voice_client.channel).name
-                            if getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none) != discord.SpeakingState.voice:
+                            if (
+                                getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none)
+                                != discord.SpeakingState.voice
+                            ):
                                 self.logger.info('Start speaking on: {}'.format(voice_client_name))
                                 self._set_speaking_state(voice_client, discord.SpeakingState.voice, timestamp_ns)
                             elif timestamp_ns - getattr(voice_client, '_dmb_last_spoke', timestamp_ns) >= 60000000000:
                                 self.logger.info('Continue speaking on: {}'.format(voice_client_name))
                                 self._set_speaking_state(voice_client, discord.SpeakingState.voice, timestamp_ns)
                 else:
-                    for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
+                    for voice_client in typing.cast(
+                        typing.List[discord.VoiceClient], self.discord_client.voice_clients
+                    ):
                         if voice_client.is_connected():
                             voice_client_name: str = typing.cast(discord.VoiceChannel, voice_client.channel).name
-                            if getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none) != discord.SpeakingState.none:
+                            if (
+                                getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none)
+                                != discord.SpeakingState.none
+                            ):
                                 self.logger.info('Stop speaking on: {}'.format(voice_client_name))
                                 self._set_speaking_state(voice_client, discord.SpeakingState.none, timestamp_ns)
 
                 # When there's a break in the sent data, the packet transmission shouldn't simply stop. Instead, send five frames of silence (0xF8, 0xFF, 0xFE) before stopping to avoid unintended Opus interpolation with subsequent transmissions.
                 # -- Discord SDK
                 if consecutive_silence <= 5:
-                    opus_packet = await self.loop.run_in_executor(self.opus_encoder_executor, self._encode_voice, buffer)
-                    for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients):
+                    opus_packet = await self.loop.run_in_executor(
+                        self.opus_encoder_executor, self._encode_voice, buffer
+                    )
+                    for voice_client in typing.cast(
+                        typing.List[discord.VoiceClient], self.discord_client.voice_clients
+                    ):
                         if voice_client.is_connected():
                             send_func = self._send_audio_packet(voice_client, opus_packet, timestamp_frames)
                             self.loop.call_soon(send_func)
                             # self.loop.call_later(0.01, send_func)
 
-                timestamp_frames = (timestamp_frames + frame_size) & 0xffffffff
+                timestamp_frames = (timestamp_frames + frame_size) & 0xFFFFFFFF
                 await lu_meter_future
 
         except Exception:
@@ -402,13 +527,15 @@ class Model:
 
     # A rewrite of discord.VoiceClient.send_audio_packet.
     # The timestamp is supplied from outside so all silent frames get counted.
-    def _send_audio_packet(self, voice_client: discord.VoiceClient, opus_packet: bytes, timestamp_frames: int) -> typing.Callable[[], None]:
+    def _send_audio_packet(
+        self, voice_client: discord.VoiceClient, opus_packet: bytes, timestamp_frames: int
+    ) -> typing.Callable[[], None]:
         sock = voice_client.socket
         sequence = voice_client.sequence
 
         voice_client.timestamp = timestamp_frames
         udp_packet = getattr(voice_client, '_get_voice_packet')(opus_packet)
-        voice_client.sequence = (voice_client.sequence + 1) & 0xffff
+        voice_client.sequence = (voice_client.sequence + 1) & 0xFFFF
 
         def send() -> None:
             if sock is None:
@@ -416,7 +543,9 @@ class Model:
             try:
                 getattr(voice_client, '_connection').send_packet(udp_packet)
             except OSError:
-                self.logger.warning('Network too slow, a packet is dropped. (seq={}, ts={})'.format(sequence, timestamp_frames))
+                self.logger.warning(
+                    'Network too slow, a packet is dropped. (seq={}, ts={})'.format(sequence, timestamp_frames)
+                )
 
         return send
 
@@ -429,7 +558,9 @@ class Model:
         c_buffer = ctypes.cast(buffer.buffer_info()[0], ctypes.POINTER(ctypes.c_float))
         max_data_bytes = len(buffer) * 4
         output = (ctypes.c_char * max_data_bytes)()
-        output_len = self.opus_encoder_private.opus_encode_float(getattr(self.opus_encoder, '_state'), c_buffer, len(buffer) // 2, output, max_data_bytes)
+        output_len = self.opus_encoder_private.opus_encode_float(
+            getattr(self.opus_encoder, '_state'), c_buffer, len(buffer) // 2, output, max_data_bytes
+        )
         return bytes(output[:output_len])
 
     async def run(self) -> None:

@@ -1,3 +1,3 @@
 #!/bin/bash
 
-exec python3 -m dmb "$@"
+exec uv run --managed-python --env-file .env discord-mic-bot "$@"
