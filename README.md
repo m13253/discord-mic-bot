@@ -54,13 +54,14 @@ You need to obtain a bot token to log into Discord's server.
 
 4. Click on "Copy Token".
 
-5. Copy `.env.example` to `.env` and paste your token there:
+5. Copy `.env.example` to `.env`:
 
    ```sh
+   # On macOS and Linux
    cp .env.example .env
    ```
 
-   Edit `.env` so it contains:
+   Paste your token into `.env` so it contains:
 
    ```dotenv
    DISCORD_BOT_TOKEN=your-token-here
