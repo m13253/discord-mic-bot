@@ -78,13 +78,13 @@ to help you invite your bot.
 1. Go to <https://discord.com/developers/applications> and click on your already
    created application.
 
-2. Click on "Copy Client ID".
+2. Click on "Copy Application ID".
 
 3. Go to
    ```
-   https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=3145728&scope=bot
+   https://discord.com/oauth2/authorize?client_id=<APPLICATION_ID>&permissions=3145728&scope=bot
    ```
-   (Replace `<CLIENT_ID>` with your Client ID)
+   (Replace `<APPLICATION_ID>` with your Application ID)
 
 4. Choose your destination server. Then click "Authorize".
 
