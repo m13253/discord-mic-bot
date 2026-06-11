@@ -32,6 +32,7 @@ class ModelThread(threading.Thread):
 
     def run(self) -> None:
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(self._run(loop))
         except BaseException as exc:
@@ -55,6 +56,7 @@ class UIThread:
 
     def run(self) -> None:
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(self._run(loop))
         finally:
@@ -82,5 +84,6 @@ def main() -> None:
         ui_thread = UIThread(m)
         ui_thread.run()
     finally:
-        m.stop()
+        shutdown_finished = m.stop()
+        shutdown_finished.result()
         model_thread.join()

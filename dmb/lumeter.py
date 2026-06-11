@@ -21,7 +21,8 @@ import concurrent.futures
 import threading
 import typing
 
-import numpy  # type: ignore
+import numpy
+import numpy.typing
 import scipy.signal  # type: ignore
 
 
@@ -29,8 +30,12 @@ class LUMeter:
     __slots__ = ['loop', 'buffer', 'zl', 'zr', 'lock', 'executor']
     # ITU-R BS.1770 coefficients at 48kHz sample rate
     # If you are looking for a set of sample-rate-irrelevant version, check out https://github.com/BrechtDeMan/loudness.py
-    coeff_b = numpy.array([1.53512485958697, -5.76194590858032, 8.11691004925258, -5.08848181111208, 1.19839281085285])
-    coeff_a = numpy.array([1, -3.68070674801639, 5.08704524797113, -3.13154635144673, 0.72520888847787])
+    coeff_b: numpy.typing.NDArray[numpy.float64] = numpy.array(
+        [1.53512485958697, -5.76194590858032, 8.11691004925258, -5.08848181111208, 1.19839281085285]
+    )
+    coeff_a: numpy.typing.NDArray[numpy.float64] = numpy.array(
+        [1, -3.68070674801639, 5.08704524797113, -3.13154635144673, 0.72520888847787]
+    )
 
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
         self.loop = loop
@@ -40,16 +45,16 @@ class LUMeter:
         self.lock = threading.Lock()
         self.executor = concurrent.futures.ThreadPoolExecutor(1)
 
-    async def push(self, buffer: array.array) -> None:
+    async def push(self, buffer: 'array.array[float]') -> None:
         if len(buffer) == 0:
             return
         if len(buffer) > 38400:
             buffer = buffer[-38400:]
         await self.loop.run_in_executor(self.executor, self._push, buffer)
 
-    def _push(self, buffer: array.array) -> None:
+    def _push(self, buffer: 'array.array[float]') -> None:
         frame_size = len(buffer) // 2
-        x = numpy.array(buffer).reshape((2, -1), order='F')
+        x: numpy.typing.NDArray[numpy.float64] = numpy.array(buffer).reshape((2, -1), order='F')
         numpy.nan_to_num(x, copy=False)
         if not numpy.all(numpy.isfinite(self.zl)):
             self.zl = scipy.signal.lfilter_zi(self.coeff_b, self.coeff_a)
@@ -69,3 +74,6 @@ class LUMeter:
         with numpy.errstate(divide='ignore'):
             lufs = numpy.log10(mean) * 10.0 - 0.691
         return lufs[0], lufs[1]
+
+    def close(self) -> None:
+        self.executor.shutdown()

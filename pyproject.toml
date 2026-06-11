@@ -20,6 +20,7 @@ discord-mic-bot = "dmb:main"
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.400",
     "ruff>=0.12.0",
 ]
 

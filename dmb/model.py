@@ -67,6 +67,8 @@ class Model:
         'opus_encoder',
         'opus_encoder_private',
         'opus_encoder_executor',
+        'encode_voice_task',
+        'stop_future',
         'lu_meter',
     ]
     muted_frame = array.array('f', [0.0] * (48000 * 20 // 1000 * 2))
@@ -88,7 +90,7 @@ class Model:
         self.discord_bot_token = discord_bot_token
         intents = discord.Intents(guilds=True, voice_states=True)
         self.discord_client = discord.Client(
-            intents=intents, loop=self.loop, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy')
+            intents=intents, max_messages=None, assume_unsync_clock=True, proxy=os.getenv('https_proxy')
         )
         self.login_status = 'Starting up…'
         self.current_viewing_guild: typing.Optional[discord.Guild] = None
@@ -111,6 +113,8 @@ class Model:
         self.opus_encoder.set_fec(True)
         self.opus_encoder.set_expected_packet_loss_percent(0.15)
         self.opus_encoder_executor = concurrent.futures.ThreadPoolExecutor(1)
+        self.encode_voice_task: typing.Optional[asyncio.Task[None]] = None
+        self.stop_future: typing.Optional[concurrent.futures.Future[None]] = None
 
         self.lu_meter = lumeter.LUMeter(self.loop)
 
@@ -185,7 +189,7 @@ class Model:
 
         async def on_ready() -> None:
             user = self.discord_client.user
-            username = typing.cast(str, user.name) if user is not None else ''
+            username = user.name if user is not None else ''
             self.login_status = 'Logged in as: {}'.format(username)
             self.logger.info(self.login_status)
             if self.v is not None:
@@ -196,7 +200,7 @@ class Model:
 
         async def on_resumed() -> None:
             user = self.discord_client.user
-            username = typing.cast(str, user.name) if user is not None else ''
+            username = user.name if user is not None else ''
             self.login_status = 'Logged in as: {}'.format(username)
             self.logger.info(self.login_status)
             if self.v is not None:
@@ -277,7 +281,7 @@ class Model:
         return self.login_status
 
     def list_guilds(self) -> typing.List[discord.Guild]:
-        return self.discord_client.guilds
+        return list(self.discord_client.guilds)
 
     def list_channels(self) -> typing.List[discord.VoiceChannel]:
         if self.current_viewing_guild is None:
@@ -559,7 +563,9 @@ class Model:
 
         return send
 
-    def _set_speaking_state(self, voice_client: discord.VoiceClient, state: int, timestamp_ns: int) -> None:
+    def _set_speaking_state(
+        self, voice_client: discord.VoiceClient, state: discord.SpeakingState, timestamp_ns: int
+    ) -> None:
         setattr(voice_client, '_dmb_speaking', state)
         setattr(voice_client, '_dmb_last_spoke', timestamp_ns)
         asyncio.ensure_future(voice_client.ws.speak(state), loop=self.loop)
@@ -575,7 +581,7 @@ class Model:
 
     async def run(self) -> None:
         try:
-            asyncio.ensure_future(self._encode_voice_loop(), loop=self.loop)
+            self.encode_voice_task = asyncio.ensure_future(self._encode_voice_loop(), loop=self.loop)
 
             self.login_status = 'Logging in…'
             self.logger.info(self.login_status)
@@ -590,19 +596,35 @@ class Model:
 
             await self.discord_client.connect()
         finally:
+            if self.stop_future is not None:
+                await asyncio.wrap_future(self.stop_future)
             if self.v is not None:
                 self.v.stop()
 
-    def stop(self) -> None:
+    def stop(self) -> concurrent.futures.Future[None]:
         self.running = False
+        self.v = None
         self.logger.info('Gracefully stopping, may take some time…')
         if self.input_stream is not None:
             self.input_stream.stop()
             self.input_stream.close()
             self.input_stream = None
-        asyncio.ensure_future(self._stop(), loop=self.loop)
+        if self.stop_future is None:
+            self.stop_future = asyncio.run_coroutine_threadsafe(self._stop(), self.loop)
+        return self.stop_future
 
     async def _stop(self) -> None:
-        await self.discord_client.close()
-        self.audio_queue.put_nowait(None)
+        close_task = asyncio.create_task(self.discord_client.close())
+        done, pending = await asyncio.wait({close_task}, timeout=10)
+        if pending:
+            self.logger.warning('Discord client close timed out; continuing shutdown.')
+            for task in pending:
+                task.cancel()
+        for task in done:
+            task.result()
+
+        await self.audio_queue.put(None)
+        if self.encode_voice_task is not None:
+            await self.encode_voice_task
         self.opus_encoder_executor.shutdown()
+        self.lu_meter.close()

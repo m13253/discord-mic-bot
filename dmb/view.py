@@ -17,7 +17,6 @@
 import asyncio
 import math
 import tkinter
-import tkinter.messagebox
 import tkinter.ttk
 import typing
 
@@ -131,7 +130,9 @@ class View:
         self.guilds_list.grid(column=0, row=0, sticky=tkinter.NSEW)
         self.guilds_list.bind('<<ListboxSelect>>', self.on_guild_changed)
         guilds_list_scroll = tkinter.ttk.Scrollbar(
-            guilds_list_panel, orient=tkinter.VERTICAL, command=self.guilds_list.yview
+            guilds_list_panel,
+            orient=tkinter.VERTICAL,
+            command=typing.cast(typing.Callable[..., None], self.guilds_list.yview),
         )
         guilds_list_scroll.grid(column=1, row=0, sticky=tkinter.NSEW)
         self.guilds_list['yscrollcommand'] = guilds_list_scroll.set
@@ -143,7 +144,9 @@ class View:
         self.channels_list = tkinter.Listbox(channels_list_panel, height=16)
         self.channels_list.grid(column=0, row=0, sticky=tkinter.NSEW)
         channels_list_scroll = tkinter.ttk.Scrollbar(
-            channels_list_panel, orient=tkinter.VERTICAL, command=self.channels_list.yview
+            channels_list_panel,
+            orient=tkinter.VERTICAL,
+            command=typing.cast(typing.Callable[..., None], self.channels_list.yview),
         )
         channels_list_scroll.grid(column=1, row=0, sticky=tkinter.NSEW)
         self.channels_list['yscrollcommand'] = channels_list_scroll.set
@@ -155,7 +158,9 @@ class View:
         self.joined_list = tkinter.Listbox(joined_list_panel, height=16)
         self.joined_list.grid(column=0, row=0, sticky=tkinter.NSEW)
         joined_list_scroll = tkinter.ttk.Scrollbar(
-            joined_list_panel, orient=tkinter.VERTICAL, command=self.joined_list.yview
+            joined_list_panel,
+            orient=tkinter.VERTICAL,
+            command=typing.cast(typing.Callable[..., None], self.joined_list.yview),
         )
         joined_list_scroll.grid(column=1, row=0, sticky=tkinter.NSEW)
         self.joined_list['yscrollcommand'] = joined_list_scroll.set
@@ -412,7 +417,7 @@ class View:
         self.guilds = self.m.list_guilds()
         self.guilds_list.delete(0, tkinter.END)
         for i in self.guilds:
-            self.guilds_list.insert(tkinter.END, typing.cast(str, i.name))
+            self.guilds_list.insert(tkinter.END, i.name)
 
     def channels_updated(self) -> None:
         if not self.running:
@@ -420,7 +425,7 @@ class View:
         self.channels = self.m.list_channels()
         self.channels_list.delete(0, tkinter.END)
         for i in self.channels:
-            self.channels_list.insert(tkinter.END, typing.cast(str, i.name))
+            self.channels_list.insert(tkinter.END, i.name)
 
     def joined_updated(self) -> None:
         if not self.running:
@@ -428,7 +433,7 @@ class View:
         self.joined = self.m.list_joined()
         self.joined_list.delete(0, tkinter.END)
         for i in self.joined:
-            self.joined_list.insert(tkinter.END, typing.cast(str, i.name))
+            self.joined_list.insert(tkinter.END, i.name)
 
     def device_updated(self) -> None:
         if not self.running:
@@ -458,21 +463,21 @@ class View:
         self.running = False
 
     def on_guild_changed(self, event: tkinter.Event) -> None:
-        current_selections: typing.Tuple[int, ...] = self.guilds_list.curselection()
+        current_selections = typing.cast(typing.Tuple[int, ...], self.guilds_list.curselection())
         if len(current_selections) == 0 or current_selections[0] >= len(self.guilds):
             return
         current_guild = self.guilds[current_selections[0]]
         self.m.view_guild(current_guild)
 
     def on_add_button_pressed(self) -> None:
-        current_selections: typing.Tuple[int, ...] = self.channels_list.curselection()
+        current_selections = typing.cast(typing.Tuple[int, ...], self.channels_list.curselection())
         if len(current_selections) == 0 or current_selections[0] >= len(self.channels):
             return
         current_channel = self.channels[current_selections[0]]
         asyncio.run_coroutine_threadsafe(self.m.join_voice(current_channel), self.m.loop)
 
     def on_remove_button_pressed(self) -> None:
-        current_selections: typing.Tuple[int, ...] = self.joined_list.curselection()
+        current_selections = typing.cast(typing.Tuple[int, ...], self.joined_list.curselection())
         if len(current_selections) == 0 or current_selections[0] >= len(self.joined):
             return
         current_channel = self.joined[current_selections[0]]
