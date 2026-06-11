@@ -20,7 +20,7 @@ import tkinter
 import tkinter.ttk
 import typing
 
-import discord  # type: ignore
+import discord
 
 if typing.TYPE_CHECKING:
     from . import model
@@ -60,7 +60,7 @@ class View:
         self.root.bind('<Destroy>', self.on_destroy)
 
         ttk_style = tkinter.ttk.Style()
-        ttk_theme_names: typing.Tuple[str, ...] = ttk_style.theme_names()
+        ttk_theme_names = ttk_style.theme_names()
         for theme in ('vista', 'aqua', 'clam'):
             if theme in ttk_theme_names:
                 ttk_style.theme_use(theme)
@@ -225,8 +225,8 @@ class View:
     def update_lumeter(self) -> None:
         if not self.running:
             return
-        width: int = self.lu_meter.winfo_width()
-        height: int = self.lu_meter.winfo_height()
+        width = self.lu_meter.winfo_width()
+        height = self.lu_meter.winfo_height()
         width_per_db = width / 70
         y_coords = math.ceil(height / 2 - 1), math.floor(height / 2 + 1)
         self.lu_meter.config(width=width, height=height)

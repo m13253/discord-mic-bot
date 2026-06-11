@@ -27,9 +27,8 @@ import time
 import traceback
 import typing
 
-import discord  # type: ignore
-import discord.gateway  # type: ignore
-import sounddevice  # type: ignore
+import discord
+import sounddevice  # pyright: ignore[reportMissingTypeStubs]
 
 from . import lumeter
 
@@ -288,12 +287,11 @@ class Model:
             return []
         return self.current_viewing_guild.voice_channels
 
+    def _voice_clients(self) -> typing.List[discord.VoiceClient]:
+        return [client for client in self.discord_client.voice_clients if isinstance(client, discord.VoiceClient)]
+
     def list_joined(self) -> typing.List[discord.VoiceChannel]:
-        return [
-            i.channel
-            for i in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients)
-            if isinstance(i.channel, discord.VoiceChannel)
-        ]
+        return [i.channel for i in self._voice_clients() if isinstance(i.channel, discord.VoiceChannel)]
 
     def list_sound_hostapis(self) -> typing.List[str]:
         hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any], ...], sounddevice.query_hostapis())
@@ -345,9 +343,7 @@ class Model:
 
     async def leave_voice(self, channel: discord.VoiceChannel) -> None:
         futures = [
-            voice_client.disconnect()
-            for voice_client in typing.cast(typing.List[discord.VoiceClient], self.discord_client.voice_clients)
-            if voice_client.channel == channel
+            voice_client.disconnect() for voice_client in self._voice_clients() if voice_client.channel == channel
         ]
         if futures:
             try:
@@ -367,7 +363,6 @@ class Model:
         hostapis = typing.cast(typing.Tuple[typing.Dict[str, typing.Any], ...], sounddevice.query_hostapis())
         devices = typing.cast(sounddevice.DeviceList, sounddevice.query_devices())
 
-        device_id: int
         for idx, dev in enumerate(typing.cast(typing.Iterable[typing.Dict[str, typing.Any]], devices)):
             if (
                 dev['name'] == device
@@ -489,11 +484,9 @@ class Model:
                 lu_meter_future = self.lu_meter.push(buffer)
 
                 if consecutive_silence <= 1:
-                    for voice_client in typing.cast(
-                        typing.List[discord.VoiceClient], self.discord_client.voice_clients
-                    ):
-                        if voice_client.is_connected():
-                            voice_client_name: str = typing.cast(discord.VoiceChannel, voice_client.channel).name
+                    for voice_client in self._voice_clients():
+                        if voice_client.is_connected() and isinstance(voice_client.channel, discord.VoiceChannel):
+                            voice_client_name = voice_client.channel.name
                             if (
                                 getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none)
                                 != discord.SpeakingState.voice
@@ -504,11 +497,9 @@ class Model:
                                 self.logger.info('Continue speaking on: {}'.format(voice_client_name))
                                 self._set_speaking_state(voice_client, discord.SpeakingState.voice, timestamp_ns)
                 else:
-                    for voice_client in typing.cast(
-                        typing.List[discord.VoiceClient], self.discord_client.voice_clients
-                    ):
-                        if voice_client.is_connected():
-                            voice_client_name: str = typing.cast(discord.VoiceChannel, voice_client.channel).name
+                    for voice_client in self._voice_clients():
+                        if voice_client.is_connected() and isinstance(voice_client.channel, discord.VoiceChannel):
+                            voice_client_name = voice_client.channel.name
                             if (
                                 getattr(voice_client, '_dmb_speaking', discord.SpeakingState.none)
                                 != discord.SpeakingState.none
@@ -522,9 +513,7 @@ class Model:
                     opus_packet = await self.loop.run_in_executor(
                         self.opus_encoder_executor, self._encode_voice, buffer
                     )
-                    for voice_client in typing.cast(
-                        typing.List[discord.VoiceClient], self.discord_client.voice_clients
-                    ):
+                    for voice_client in self._voice_clients():
                         if voice_client.is_connected():
                             send_func = self._send_audio_packet(voice_client, opus_packet, timestamp_frames)
                             self.loop.call_soon(send_func)
