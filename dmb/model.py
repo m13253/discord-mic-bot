@@ -78,9 +78,12 @@ class Model:
 
         self.logger = logging.getLogger('model')
         self.logger.setLevel(logging.INFO)
-        logging_handler = logging.StreamHandler()
-        logging_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S'))
-        self.logger.addHandler(logging_handler)
+        if not self.logger.handlers:
+            logging_handler = logging.StreamHandler()
+            logging_handler.setFormatter(
+                logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S')
+            )
+            self.logger.addHandler(logging_handler)
 
         self.discord_bot_token = discord_bot_token
         intents = discord.Intents(guilds=True, voice_states=True)
@@ -115,22 +118,29 @@ class Model:
 
     @staticmethod
     def _opus_library_candidates() -> typing.Iterator[str]:
+        candidates: typing.List[str] = []
         discovered = ctypes.util.find_library('opus')
         if discovered:
-            yield discovered
+            candidates.append(discovered)
 
         if platform.system() == 'Darwin':
             homebrew_prefixes = ('/opt/homebrew', '/usr/local')
             library_names = ('libopus.dylib', 'libopus.0.dylib')
-            for prefix in homebrew_prefixes:
-                for library_name in library_names:
-                    yield os.path.join(prefix, 'opt', 'opus', 'lib', library_name)
+            candidates.extend(
+                os.path.join(prefix, 'opt', 'opus', 'lib', library_name)
+                for prefix in homebrew_prefixes
+                for library_name in library_names
+            )
         elif platform.system() == 'Linux':
-            yield 'libopus.so.0'
-            yield 'libopus.so'
+            candidates.extend(('libopus.so.0', 'libopus.so'))
         elif platform.system() == 'Windows':
-            yield 'opus'
-            yield 'libopus-0'
+            candidates.extend(('opus', 'libopus-0'))
+
+        seen: typing.Set[str] = set()
+        for candidate in candidates:
+            if candidate not in seen:
+                seen.add(candidate)
+                yield candidate
 
     @classmethod
     def _load_opus(cls) -> None:
@@ -155,7 +165,7 @@ class Model:
     def _set_up_events(self) -> None:
 
         async def on_connect() -> None:
-            self.login_status = 'Retreving user info…'
+            self.login_status = 'Retrieving user info…'
             self.logger.info(self.login_status)
             if self.v is not None:
                 self.v.loop.call_soon_threadsafe(self.v.login_status_updated)

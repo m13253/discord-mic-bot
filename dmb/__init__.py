@@ -32,7 +32,14 @@ class ModelThread(threading.Thread):
 
     def run(self) -> None:
         loop = asyncio.new_event_loop()
-        loop.run_until_complete(self._run(loop))
+        try:
+            loop.run_until_complete(self._run(loop))
+        except BaseException as exc:
+            if not self.init_finished.done():
+                self.init_finished.set_exception(exc)
+            raise
+        finally:
+            loop.close()
 
     async def _run(self, loop: asyncio.AbstractEventLoop) -> None:
         from . import model
@@ -48,7 +55,10 @@ class UIThread:
 
     def run(self) -> None:
         loop = asyncio.new_event_loop()
-        loop.run_until_complete(self._run(loop))
+        try:
+            loop.run_until_complete(self._run(loop))
+        finally:
+            loop.close()
 
     async def _run(self, loop: asyncio.AbstractEventLoop) -> None:
         from . import view
