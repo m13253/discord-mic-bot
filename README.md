@@ -27,14 +27,15 @@ First, install uv from <https://docs.astral.sh/uv/getting-started/installation/>
 Install the native audio libraries:
 
 - macOS with Homebrew:
-  ```sh
+  ```bash
   brew install opus portaudio
   ```
-- Linux: install libopus and libportaudio with your distribution's package manager.
+- Linux: install `libopus` and `libportaudio` with your distribution's package manager.
+- Windows: You should be able to skip this step. Please [report a bug](https://github.com/m13253/discord-mic-bot/issues) if you receive any error related to Opus or PortAudio.
 
 Then set up the uv-managed Python environment:
 
-```sh
+```bash
 cd /path/to/discord-mic-bot
 uv python install 3.12
 uv sync --managed-python --python 3.12
@@ -56,7 +57,7 @@ You need to obtain a bot token to log into Discord's server.
 
 5. Copy `.env.example` to `.env`:
 
-   ```sh
+   ```bash
    # On macOS and Linux
    cp .env.example .env
    ```
@@ -92,7 +93,7 @@ to help you invite your bot.
 
 For Linux or macOS users, run:
 
-```sh
+```bash
 ./discord-mic-bot
 ```
 
