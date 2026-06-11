@@ -22,7 +22,7 @@ Hey Discord developers, listen to these feedbacks! Shame on you!
 
 ## Installation
 
-First, install [uv](https://docs.astral.sh/uv/) and download discord-mic-bot.
+First, install uv from <https://docs.astral.sh/uv/getting-started/installation/> and download discord-mic-bot.
 
 Install the native audio libraries:
 
