@@ -145,10 +145,20 @@ class Model:
                 seen.add(candidate)
                 yield candidate
 
+class Model:
+    def __init__(self, discord_bot_token, loop):
+        ...
+        self._load_opus()
+        ...
+
     @classmethod
     def _load_opus(cls) -> None:
         if discord.opus.is_loaded():
             return
+
+        if platform.system() == 'Windows':
+            if discord.opus._load_default():
+                return
 
         load_errors: typing.List[str] = []
         for library in cls._opus_library_candidates():
